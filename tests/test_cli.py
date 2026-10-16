@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from callscope import cli
+from callscope import cli, pipeline
 from callscope.errors import AudioError
 from callscope.model import RawTranscript
 
@@ -250,7 +250,7 @@ def test_semantic_flag_calls_recheck(tmp_path, monkeypatch):
         seen.append("called")
         return score, ["Ollama недоступна — подставная проверка."]
 
-    monkeypatch.setattr(cli, "recheck", fake_recheck)
+    monkeypatch.setattr(pipeline, "recheck", fake_recheck)
     out = tmp_path / "out"
     assert run(str(calls), "--out", str(out), "--no-semantic").exit_code == 0
     assert seen == []

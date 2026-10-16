@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from dataclasses import replace
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -26,13 +27,10 @@ from callscope.cache import TranscriptCache
 from callscope.checklist import Checklist, load_checklist
 from callscope.config import AppConfig, load_config
 from callscope.errors import AudioError, CallScopeError, ConfigError
-from callscope.filenames import parse_filename
 from callscope.model import CallResult, RawTranscript, SkippedFile
+from callscope.pipeline import analyze_raw, transcript_for
 from callscope.report_html import write_html
 from callscope.report_xlsx import write_xlsx
-from callscope.roles import assign_roles
-from callscope.scoring import score_call
-from callscope.semantic import recheck
 from callscope.textnorm import Normalizer
 
 AUDIO_EXTENSIONS = (".mp3", ".wav", ".ogg", ".m4a")
@@ -93,6 +91,13 @@ def out_problem(out: Path) -> str | None:
     if not os.access(existing, os.W_OK | os.X_OK):
         return f"Нет прав на запись в папку {existing}: отчёт в {out} не записать."
     return None
+
+
+class _RefreshCache(TranscriptCache):
+    """--no-cache: кэш не читается, но свежая расшифровка в него записывается."""
+
+    def get(self, key: str) -> RawTranscript | None:
+        return None
 
 
 def _load_settings(
@@ -157,9 +162,11 @@ def analyze(
     use_semantic = config.semantic.enabled if semantic is None else semantic
     cli_channel = manager_channel.value
 
+    # Ключ кэша считается по модели из настроек — подставляем выбранную в --model.
+    config = replace(config, model_size=model_size, model_path=model_path)
     transcriber = Transcriber(model_size, model_path)
-    cache = TranscriptCache(path / CACHE_DIR_NAME)
-    cache_label = model_path or model_size
+    cache_dir = path / CACHE_DIR_NAME
+    cache = _RefreshCache(cache_dir) if no_cache else TranscriptCache(cache_dir)
     normalizer = Normalizer()
     thresholds = config.thresholds
 
@@ -186,9 +193,7 @@ def analyze(
                 progress.update(task_id, completed=round(fraction * 100))
 
             try:
-                raw, from_cache = _transcript(
-                    audio, transcriber, cache, cache_label, config, no_cache, on_progress
-                )
+                raw, from_cache = transcript_for(audio, transcriber, cache, config, on_progress)
             except AudioError as exc:
                 skipped.append(SkippedFile(audio.name, exc.message_ru))
                 progress.console.print(f"[yellow]Пропущен {audio.name}: {exc.message_ru}[/yellow]")
@@ -199,7 +204,7 @@ def analyze(
                 progress.stop()
                 raise _fail(exc.message_ru, 1) from None
 
-            result = _analyze_one(
+            result = analyze_raw(
                 audio.name, raw, config, checklist, normalizer, cli_channel, use_semantic
             )
             results.append(result)
@@ -233,52 +238,3 @@ def analyze(
     )
     console.print(summary.conclusion)
     typer.echo(f"Отчёт: {folder}")
-
-
-def _transcript(
-    audio: Path,
-    transcriber: Transcriber,
-    cache: TranscriptCache,
-    cache_label: str,
-    config: AppConfig,
-    no_cache: bool,
-    on_progress,
-) -> tuple[RawTranscript, bool]:
-    key = cache.key(audio, cache_label, config.mono_turn_gap)
-    if not no_cache:
-        cached = cache.get(key)
-        if cached is not None:
-            return cached, True
-    raw = transcriber.transcribe(audio, config.mono_turn_gap, on_progress=on_progress)
-    try:
-        cache.put(key, raw)
-    except OSError:
-        pass  # кэш — ускорение, без него анализ всё равно идёт
-    return raw, False
-
-
-def _analyze_one(
-    file_name: str,
-    raw: RawTranscript,
-    config: AppConfig,
-    checklist: Checklist,
-    normalizer: Normalizer,
-    cli_channel: str,
-    use_semantic: bool,
-) -> CallResult:
-    meta = parse_filename(
-        file_name, config.filename_template, config.date_format, config.time_format
-    )
-    warnings: list[str] = []
-    if not meta.matched_template:
-        warnings.append(
-            f"{file_name}: имя не подходит под шаблон «{config.filename_template}» — "
-            f"менеджер «{meta.manager}»."
-        )
-    dialogue, role_warnings = assign_roles(raw, config, file_name, cli_channel)  # type: ignore[arg-type]
-    warnings.extend(role_warnings)
-    score = score_call(dialogue, checklist, config.thresholds, normalizer)
-    if use_semantic:
-        score, semantic_warnings = recheck(dialogue, checklist, score, config, config.thresholds)
-        warnings.extend(semantic_warnings)
-    return CallResult(meta=meta, dialogue=dialogue, score=score, warnings=tuple(warnings))
