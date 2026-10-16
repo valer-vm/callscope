@@ -6,7 +6,7 @@
 В рабочей папке (в пути есть «:») сначала: `export UV_PROJECT_ENVIRONMENT=$HOME/.cache/callscope-venv`; в пути без «:» не нужно.
 
 - `uv sync` — зависимости.
-- `uv run ruff check src tests scripts && uv run pytest -q` — линтер и тесты (162 passed, 1 skipped).
+- `uv run ruff check src tests scripts && uv run pytest -q` — линтер и тесты (177 passed, 1 skipped).
 - `uv run pytest tests/test_scoring.py -q` — один файл.
 - `uv run callscope analyze examples/calls` — отчёт в `reports/<дата_время>/`; ~31 с первый раз, 0 с из кэша.
 - `uv run python scripts/generate_examples.py --out <dir>` — 5 m4a за ~34 с (`say`, голос Milena, только macOS).
@@ -28,7 +28,6 @@
 - faster-whisper 1.2.1 и PyAV 19 несовместимы в `decode_audio`; обход в `src/callscope/asr.py` (`_decode_stereo_av`).
 - pymorphy иногда выбирает редкий разбор (омонимы): сравнение идёт по основной лемме, видовые пары и «здравствуйте» — таблицы в `src/callscope/textnorm.py`.
 - Whisper пишет «Строй дом» и цифры («20», «10%»): фразы чек-листа и `company_names` должны это терпеть.
-- Ключ кэша не учитывает `mono_turn_gap` (и чек-лист): после смены порога для моно — `--no-cache`.
 - Новую зависимость добавляй только через согласование (в `interfaces.md` — BLOCKED); ffmpeg и системный python3 в системе не рассчитывай.
 - Не трогать: `brief.md`, `.autopilot/`, `CLAUDE.md`.
 

@@ -23,8 +23,9 @@ class TranscriptCache:
     def __init__(self, directory: Path) -> None:
         self.directory = directory
 
-    def key(self, audio: Path, model_size: str) -> str:
-        """sha256 содержимого файла + модель + версия формата. Имя файла и чек-лист не влияют."""
+    def key(self, audio: Path, model_size: str, mono_turn_gap: float) -> str:
+        """sha256 содержимого файла + модель + порог пауз для моно + версия формата.
+        Имя файла и чек-лист не влияют."""
         digest = hashlib.sha256()
         try:
             with audio.open("rb") as handle:
@@ -32,7 +33,7 @@ class TranscriptCache:
                     digest.update(chunk)
         except OSError:
             raise AudioError(f"Не удалось прочитать файл {audio.name}.") from None
-        meta = f"|model={model_size}|format={_FORMAT_VERSION}".encode()
+        meta = f"|model={model_size}|gap={mono_turn_gap!r}|format={_FORMAT_VERSION}".encode()
         return hashlib.sha256(digest.digest() + meta).hexdigest()
 
     def _path(self, key: str) -> Path:

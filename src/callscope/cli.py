@@ -224,7 +224,7 @@ def _transcript(
     no_cache: bool,
     on_progress,
 ) -> tuple[RawTranscript, bool]:
-    key = cache.key(audio, cache_label)
+    key = cache.key(audio, cache_label, config.mono_turn_gap)
     if not no_cache:
         cached = cache.get(key)
         if cached is not None:
