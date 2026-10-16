@@ -103,3 +103,13 @@ def test_manager_page_has_chart_failures_and_call_links(authed, seeded):
     assert "Частые провалы" in html
     missing = authed.get("/managers/nobody")
     assert missing.status_code == 404
+
+
+def test_period_in_url_applies_and_is_remembered(authed, seeded):
+    assert "Последние 4 недели" in authed.get("/").text
+    assert "Всё время" in authed.get("/?period=all").text
+    assert "Всё время" in authed.get("/managers").text  # запомнился в сессии
+    start = (date.today() - timedelta(days=5)).isoformat()
+    html = authed.get(f"/managers?period=custom&start={start}").text
+    assert "ivanov" in html and "petrova" not in html
+    assert "Последние 4 недели" not in authed.get("/?period=bogus").text  # неизвестный — игнор

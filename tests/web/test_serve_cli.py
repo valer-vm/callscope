@@ -202,3 +202,9 @@ def test_cookie_secure_flag_from_env(monkeypatch, tmp_path):
     monkeypatch.setenv("CALLSCOPE_PASSWORD", "x")
     monkeypatch.setenv("CALLSCOPE_COOKIE_SECURE", "1")
     assert load_web_settings(tmp_path / "d", demo=False).cookie_secure is True
+
+
+def test_address_message_says_panel_is_open_to_network():
+    assert cli.panel_address_message("127.0.0.1", 8000) == "Панель: http://127.0.0.1:8000"
+    message = cli.panel_address_message("0.0.0.0", 8000)
+    assert "все сетевые адреса" in message and "http://127.0.0.1:8000" in message

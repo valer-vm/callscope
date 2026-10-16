@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 import yaml
 
-from callscope.config import DEFAULTS_DIR, read_yaml_file
+from callscope.config import DEFAULTS_DIR, read_yaml_file, yaml_with_comments
 from callscope.errors import ConfigError
 from callscope.model import Role
 
@@ -254,7 +254,7 @@ def dump_checklist(checklist: Checklist) -> str:
     if checklist.synonyms:
         data["synonyms"] = {word: list(repl) for word, repl in checklist.synonyms.items()}
     data["items"] = [_item_to_dict(item) for item in checklist.items]
-    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False, width=88)
+    return yaml_with_comments(data, DEFAULTS_DIR / "checklist.yaml")
 
 
 def save_checklist(checklist: Checklist, path: Path) -> None:

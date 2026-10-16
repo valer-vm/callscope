@@ -267,9 +267,46 @@ def config_to_dict(config: AppConfig) -> dict[str, Any]:
     }
 
 
+def comment_blocks(reference: str) -> tuple[list[str], dict[str, list[str]]]:
+    """Комментарии встроенного файла: шапка и блок перед каждым ключом верхнего уровня."""
+    header: list[str] = []
+    blocks: dict[str, list[str]] = {}
+    pending: list[str] = []
+    seen_key = False
+    for line in reference.splitlines():
+        if line.startswith("#") or (not line.strip() and pending):
+            pending.append(line)
+            continue
+        if line and not line[0].isspace() and ":" in line:
+            key = line.split(":", 1)[0].strip()
+            if not seen_key:
+                # Шапка — всё до первой пустой строки; остальное относится к ключу.
+                split = pending.index("") if "" in pending else len(pending)
+                header, pending = pending[:split], pending[split + 1 :]
+                seen_key = True
+            blocks[key] = [c for c in pending if c.strip()]
+        pending = []
+    return header, blocks
+
+
+def yaml_with_comments(data: dict[str, Any], reference_path: Path, width: int = 88) -> str:
+    """YAML с комментариями-подсказками встроенного файла: при сохранении из панели
+    пояснения к полям не пропадают (сами значения — из `data`)."""
+    try:
+        header, blocks = comment_blocks(reference_path.read_text(encoding="utf-8"))
+    except OSError:
+        header, blocks = [], {}
+    parts: list[str] = ["\n".join(header)] if header else []
+    for key, value in data.items():
+        chunk = yaml.safe_dump({key: value}, allow_unicode=True, sort_keys=False, width=width)
+        comments = blocks.get(key, [])
+        parts.append("\n".join([*comments, chunk.rstrip("\n")]))
+    return "\n\n".join(parts) + "\n"
+
+
 def save_config(config: AppConfig, path: Path) -> None:
     """Атомарная запись в формате `callscope.yaml`; результат проверяется `load_config`."""
-    text = yaml.safe_dump(config_to_dict(config), allow_unicode=True, sort_keys=False)
+    text = yaml_with_comments(config_to_dict(config), DEFAULTS_DIR / "callscope.yaml")
     tmp = path.with_name(path.name + ".tmp")
     try:
         tmp.write_text(text, encoding="utf-8")

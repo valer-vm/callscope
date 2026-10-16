@@ -248,6 +248,17 @@ def analyze(
 # --- веб-панель -----------------------------------------------------------------------
 
 
+def panel_address_message(host: str, port: int) -> str:
+    """Куда открывать панель. При 0.0.0.0 прямо сказано, что она доступна из сети."""
+    if host in ("0.0.0.0", "", "::"):
+        return (
+            f"Панель слушает все сетевые адреса этого компьютера, порт {port}: "
+            f"здесь — http://127.0.0.1:{port}, из локальной сети — "
+            f"http://<адрес этого компьютера>:{port} (вход по паролю)."
+        )
+    return f"Панель: http://{host}:{port}"
+
+
 def _run_server(app_: FastAPI, host: str, port: int) -> None:
     import uvicorn
 
@@ -313,10 +324,9 @@ def serve(
         working.load,
     )
     web_app = create_app(settings, worker)
-    shown_host = "127.0.0.1" if bind_host in ("0.0.0.0", "") else bind_host
     mode = " (демо)" if demo else ""
     console.print(f"Папка данных: {settings.data_dir.resolve()}{mode}")
-    typer.echo(f"Панель: http://{shown_host}:{bind_port}")
+    typer.echo(panel_address_message(bind_host, bind_port))
     _run_server(web_app, bind_host, bind_port)
 
 

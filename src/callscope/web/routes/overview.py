@@ -29,7 +29,11 @@ PRESETS = ("week", "4weeks", "quarter", "all")
 
 
 def current_period(request: Request) -> tuple[PeriodChoice, stats.Period]:
-    """Выбор периода из сессии и сам период (для фильтров и подписей)."""
+    """Выбор периода и сам период (для фильтров и подписей). Период в адресе страницы
+    (`?period=week|4weeks|quarter|all|custom&start=…&end=…`) важнее сессии и запоминается."""
+    from_url = _period_from_query(request)
+    if from_url is not None:
+        set_period_choice(request, from_url)
     choice = get_period_choice(request)
     if choice.preset == "custom":
         return choice, stats.period_custom(choice.start, choice.end)
@@ -41,6 +45,19 @@ def safe_next(value: str | None) -> str:
     if value and value.startswith("/") and not value.startswith("//") and "\\" not in value:
         return value
     return "/"
+
+
+def _period_from_query(request: Request) -> PeriodChoice | None:
+    preset = request.query_params.get("period")
+    if preset == "custom":
+        first = _parse_date(request.query_params.get("start"))
+        last = _parse_date(request.query_params.get("end"))
+        if first and last and first > last:
+            first, last = last, first
+        return PeriodChoice("custom", first, last) if first or last else PeriodChoice("all")
+    if preset in PRESETS:
+        return PeriodChoice(preset)  # type: ignore[arg-type]
+    return None
 
 
 def _parse_date(value: str | None) -> date | None:
