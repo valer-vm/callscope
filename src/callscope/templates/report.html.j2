@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CallScope — отчёт по звонкам</title>
+<style>
+:root{--bg:#f7f8fa;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;
+--good:#15803d;--good-bg:#dcfce7;--mid:#a16207;--mid-bg:#fef3c7;--bad:#b91c1c;--bad-bg:#fee2e2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+main{max-width:980px;margin:0 auto;padding:32px 20px 64px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:19px;margin:36px 0 12px}h3{font-size:16px;margin:0}
+.muted{color:var(--muted);font-size:13px}
+.conclusion{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--accent);
+border-radius:10px;padding:18px 22px;margin:20px 0;font-size:18px;font-weight:600}
+.kpis{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px}
+.kpi b{display:block;font-size:22px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:#f3f4f6;font-size:13px;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:0}
+.bar{height:10px;background:#e5e7eb;border-radius:5px;min-width:120px}
+.bar i{display:block;height:10px;background:var(--accent);border-radius:5px}
+.score{display:inline-block;min-width:52px;text-align:center;font-weight:700;border-radius:999px;padding:2px 12px}
+.good{color:var(--good);background:var(--good-bg)}.medium{color:var(--mid);background:var(--mid-bg)}
+.bad{color:var(--bad);background:var(--bad-bg)}
+.call{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:14px 0}
+.call-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.loss{margin:8px 0;font-size:14px}
+.note{background:var(--mid-bg);color:var(--mid);border-radius:6px;padding:4px 10px;font-size:13px;display:inline-block;margin:4px 6px 0 0}
+details{border-top:1px solid var(--line);margin-top:10px;padding-top:8px}
+summary{cursor:pointer;font-weight:600}
+.item{padding:8px 0;border-bottom:1px dashed var(--line)}
+.item:last-child{border-bottom:0}
+.st{font-size:12px;font-weight:700;border-radius:4px;padding:1px 8px;margin-right:6px}
+.st.passed{color:var(--good);background:var(--good-bg)}.st.failed{color:var(--bad);background:var(--bad-bg)}
+.st.na{color:var(--muted);background:#f3f4f6}
+blockquote{margin:6px 0 0;padding:4px 12px;border-left:3px solid var(--line);color:#374151}
+.tr p{margin:4px 0}.role{font-weight:700}.role.manager{color:var(--accent)}.role.client{color:#7c3aed}
+ul.plain{margin:0;padding-left:20px}
+@media print{body{background:#fff}main{max-width:none;padding:0}
+.call{break-inside:avoid-page}
+details>*{display:block !important}details{display:block}summary{list-style:none}
+.score,.st,.bar i{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<main>
+<h1>Анализ звонков отдела продаж</h1>
+<div class="muted">Папка: {{ s.source_dir }} · сформирован {{ s.generated_at.strftime("%d.%m.%Y %H:%M") }}</div>
+
+<div class="conclusion">{{ s.conclusion }}</div>
+
+<div class="kpis">
+<div class="kpi"><b>{{ s.calls|length }}</b><span class="muted">звонков оценено</span></div>
+<div class="kpi"><b>{{ "%.0f"|format(s.avg_score) }}</b><span class="muted">средний балл</span></div>
+<div class="kpi"><b>{{ s.managers|length }}</b><span class="muted">менеджеров</span></div>
+{% if s.skipped %}<div class="kpi"><b>{{ s.skipped|length }}</b><span class="muted">пропущено файлов</span></div>{% endif %}
+</div>
+
+<h2>Менеджеры</h2>
+<table>
+<tr><th>Менеджер</th><th>Звонков</th><th>Средний балл</th><th>Чаще всего проваливает</th></tr>
+{% for m in s.managers %}
+<tr><td>{{ m.manager }}</td><td>{{ m.calls }}</td>
+<td><span class="score {{ grade_of(m.avg_score) }}">{{ "%.0f"|format(m.avg_score) }}</span></td>
+<td>{% if m.top_failures %}{% for item_id, n in m.top_failures %}{{ titles.get(item_id, item_id) }} ({{ n }}){% if not loop.last %}; {% endif %}{% endfor %}{% else %}провалов нет{% endif %}</td></tr>
+{% endfor %}
+</table>
+
+<h2>На каком этапе теряются звонки</h2>
+<table>
+<tr><th>Этап скрипта</th><th>Потеряно звонков</th><th></th></tr>
+{% for item_id, n in s.loss_distribution %}
+<tr><td>{{ titles.get(item_id, item_id) }}</td><td>{{ n }}</td>
+<td><div class="bar"><i style="width:{{ (100 * n / max_loss) if max_loss else 0 }}%"></i></div></td></tr>
+{% endfor %}
+</table>
+<p class="muted">Звонок считается потерянным на первом проваленном пункте чек-листа.</p>
+
+{% if s.failure_ranking %}
+<h2>Рейтинг провалов по пунктам</h2>
+<table>
+<tr><th>Пункт</th><th>Раз провален</th><th></th></tr>
+{% for item_id, n in s.failure_ranking %}
+<tr><td>{{ titles.get(item_id, item_id) }}</td><td>{{ n }}</td>
+<td><div class="bar"><i style="width:{{ 100 * n / max_fail }}%"></i></div></td></tr>
+{% endfor %}
+</table>
+{% endif %}
+
+<h2>Звонки</h2>
+{% for c in s.calls %}
+<section class="call">
+<div class="call-head">
+<div><h3>{{ c.meta.file_name }}</h3>
+<div class="muted">{{ c.meta.manager }} · {{ c.meta.call_datetime|when }}</div></div>
+<div><span class="score {{ c.score.grade }}">{{ "%.0f"|format(c.score.score) }}</span>
+<span class="muted">{{ grade_label[c.score.grade] }}</span></div>
+</div>
+<div class="loss">{% if c.score.loss_item_id %}Потерян на этапе: <b>{{ titles.get(c.score.loss_item_id, c.score.loss_item_id) }}</b>{% else %}Этапа потери нет{% endif %}</div>
+{% if c.dialogue.approximate %}<span class="note">Стороны определены приблизительно</span>{% endif %}
+{% for w in c.warnings %}<span class="note">{{ w }}</span>{% endfor %}
+<details>
+<summary>Разбор по пунктам чек-листа</summary>
+{% for r in c.score.items %}
+<div class="item">
+<span class="st {{ r.status }}">{{ status_label[r.status] }}</span><b>{{ titles.get(r.item_id, r.item_id) }}</b>
+{% if r.by_model %}<span class="muted"> · подтверждено моделью</span>{% endif %}
+<div class="muted">{{ r.reason }}</div>
+{% for e in r.evidence %}<blockquote>{{ e.start|clock }} · {{ role_label[e.role] }}: «{{ e.text }}»</blockquote>{% endfor %}
+</div>
+{% endfor %}
+</details>
+<details>
+<summary>Расшифровка</summary>
+<div class="tr">
+{% for u in c.dialogue.utterances %}<p><span class="muted">{{ u.start|clock }}</span> <span class="role {{ u.role }}">{{ role_label[u.role] }}:</span> {{ u.text }}</p>{% endfor %}
+</div>
+</details>
+</section>
+{% endfor %}
+
+{% if s.skipped %}
+<h2>Пропущенные файлы</h2>
+<ul class="plain">{% for f in s.skipped %}<li><b>{{ f.file_name }}</b> — {{ f.reason }}</li>{% endfor %}</ul>
+{% endif %}
+{% set warned = s.calls|selectattr("warnings")|list %}
+{% if warned %}
+<h2>Предупреждения</h2>
+<ul class="plain">{% for c in warned %}{% for w in c.warnings %}<li><b>{{ c.meta.file_name }}</b> — {{ w }}</li>{% endfor %}{% endfor %}</ul>
+{% endif %}
+</main>
+<script>
+// Перед печатью раскрываем все свёрнутые блоки.
+window.addEventListener("beforeprint",function(){document.querySelectorAll("details").forEach(function(d){d.setAttribute("open","")})});
+</script>
+</body>
+</html>
