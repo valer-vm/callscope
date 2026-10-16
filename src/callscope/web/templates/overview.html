@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block head %}
+<style>
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:0 0 8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.tile .label{color:var(--muted);font-size:13px;font-weight:600}
+.tile .value{font-size:34px;font-weight:700;line-height:1.2;margin-top:2px}
+.tile .value .score{font-size:30px;padding:0 16px}
+.tile .hint{color:var(--muted);font-size:13px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.insight{background:var(--bad-bg);color:var(--bad);border-radius:10px;padding:10px 14px;
+margin:0 0 12px;font-weight:600}
+.insight.ok{background:var(--good-bg);color:var(--good)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 22px;margin:0 0 8px;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;
+vertical-align:-1px}
+.chart-note{margin:6px 0 0}
+@media (max-width:820px){.tiles{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<h1>Обзор</h1>
+<p class="muted">Как команда справляется со скриптом продаж за выбранный период.</p>
+{% include "_period.html" %}
+
+{% if data.calls == 0 %}
+<div class="empty">
+  <b>Звонков за этот период нет</b>
+  <span class="muted">Выберите другой период или <a href="/upload">загрузите записи</a> — после обработки здесь появятся цифры.</span>
+</div>
+{% else %}
+<div class="tiles">
+  <div class="tile">
+    <div class="label">Звонков</div>
+    <div class="value">{{ data.calls }}</div>
+    <div class="hint">оценено за период</div>
+  </div>
+  <div class="tile">
+    <div class="label">Средний балл</div>
+    <div class="value"><span class="score {{ data.avg_score | grade(thresholds) }}">{{ data.avg_score | score }}</span></div>
+    <div class="hint">из 100; «хорошо» — от {{ data.good_threshold | score }}</div>
+  </div>
+  <div class="tile">
+    <div class="label">Звонков ниже {{ data.good_threshold | score }}</div>
+    <div class="value">{{ data.below_good_share | percent }}</div>
+    <div class="hint">доля звонков, не дотянувших до «хорошо»</div>
+  </div>
+</div>
+
+<h2>Где скрипт проваливается</h2>
+<div class="panel">
+  {% if data.top_failure %}
+  <p class="insight">Чаще всего звонок проваливается на пункте «{{ data.top_failure.title }}»: он не выполнен в {{ data.top_failure.failed }} из {{ data.calls }} звонков ({{ (data.top_failure.failed / data.calls) | percent }}).
+    {%- if top_lost and top_lost.item_id != data.top_failure.item_id %} Больше всего звонков «срывается» впервые на пункте «{{ top_lost.title }}» ({{ top_lost.lost }}).{% endif %}</p>
+  {% else %}
+  <p class="insight ok">За этот период ни один пункт чек-листа не провален.</p>
+  {% endif %}
+  <div class="legend">
+    <span><i style="background:#dc2626"></i>Провалено — в скольких звонках пункт не выполнен</span>
+    <span><i style="background:#f59e0b"></i>Потеряно — где в звонке произошёл первый срыв скрипта</span>
+  </div>
+  {{ funnel_svg }}
+  <p class="muted chart-note">Длина полосы — доля от всех звонков за период (полоса целиком — все звонки). Пункты идут в порядке чек-листа.</p>
+</div>
+
+<h2>Средний балл по неделям</h2>
+<div class="panel">
+  {{ line_svg }}
+  <p class="muted chart-note">Каждая точка — средний балл звонков недели. Если недели без звонков, линия прерывается (серый кружок внизу), а не падает в ноль.</p>
+</div>
+{% endif %}
+{% endblock %}

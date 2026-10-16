@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block head %}
+<style>
+.rank-num{color:var(--muted);width:36px}
+.rank-name{font-weight:600}
+.rank-name a{text-decoration:none}
+.rank-name a:hover{text-decoration:underline}
+td.num,th.num{text-align:center}
+</style>
+{% endblock %}
+{% block content %}
+<h1>Менеджеры</h1>
+<p class="muted">Рейтинг по среднему баллу за выбранный период. Нажмите на имя — откроется страница менеджера.</p>
+{% include "_period.html" %}
+
+{% if not rows %}
+<div class="empty">
+  <b>Звонков за этот период нет</b>
+  <span class="muted">Выберите другой период или <a href="/upload">загрузите записи</a>.</span>
+</div>
+{% else %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>#</th><th>Менеджер</th><th class="num">Звонков</th><th class="num">Средний балл</th><th>Чаще всего проваливает</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr>
+    <td class="rank-num">{{ loop.index }}</td>
+    <td class="rank-name"><a href="/managers/{{ row.manager | urlencode }}">{{ row.manager }}</a></td>
+    <td class="num">{{ row.calls }}</td>
+    <td class="num"><span class="score {{ row.avg_score | grade(thresholds) }}">{{ row.avg_score | score }}</span></td>
+    <td>{% if row.top_failures %}{{ titles.get(row.top_failures[0][0], row.top_failures[0][0]) }} <span class="muted">— в {{ row.top_failures[0][1] }} из {{ row.calls }}</span>{% else %}<span class="muted">провалов нет</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

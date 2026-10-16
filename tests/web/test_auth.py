@@ -142,11 +142,19 @@ def test_session_from_old_password_is_rejected(web_settings, tmp_path):
     assert second.get("/upload").status_code == 303
 
 
-@pytest.mark.parametrize("path", ["/", "/managers", "/calls", "/settings/checklist"])
+@pytest.mark.parametrize("path", ["/calls", "/settings/checklist"])
 def test_stub_pages_render_in_shell(authed, path):
     response = authed.get(path)
     assert response.status_code == 200
     assert "Раздел появится скоро" in response.text
+    for item in ("Обзор", "Менеджеры", "Звонки", "Загрузка", "Настройки", "Выйти"):
+        assert item in response.text
+
+
+@pytest.mark.parametrize("path", ["/", "/managers"])
+def test_real_pages_render_in_shell(authed, path):
+    response = authed.get(path)
+    assert response.status_code == 200
     for item in ("Обзор", "Менеджеры", "Звонки", "Загрузка", "Настройки", "Выйти"):
         assert item in response.text
 

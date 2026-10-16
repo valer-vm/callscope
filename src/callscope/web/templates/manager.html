@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block head %}
+<style>
+.back{display:inline-block;margin-bottom:8px;font-size:14px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.facts{display:flex;flex-wrap:wrap;gap:8px 24px;align-items:center;margin:4px 0 0}
+.facts .score{font-size:20px;padding:1px 16px}
+.fails{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.fails li{display:flex;justify-content:space-between;gap:12px;background:var(--bad-bg);
+color:var(--bad);border-radius:8px;padding:8px 12px;font-weight:600}
+.fails li span:last-child{white-space:nowrap}
+.chart-note{margin:6px 0 0}
+</style>
+{% endblock %}
+{% block content %}
+<a class="back" href="/managers">← Все менеджеры</a>
+<h1>{{ name }}</h1>
+{% include "_period.html" %}
+
+{% if not calls %}
+<div class="empty">
+  <b>У менеджера нет звонков за этот период</b>
+  <span class="muted">Выберите другой период или <a href="/upload">загрузите записи</a>.</span>
+</div>
+{% else %}
+<div class="facts">
+  <span>Звонков: <b>{{ row.calls }}</b></span>
+  <span>Средний балл: <span class="score {{ row.avg_score | grade(thresholds) }}">{{ row.avg_score | score }}</span></span>
+</div>
+
+<h2>Динамика среднего балла</h2>
+<div class="panel">
+  {{ line_svg }}
+  <p class="muted chart-note">Каждая точка — средний балл звонков недели; пропуск линии — неделя без звонков.</p>
+</div>
+
+<h2>Частые провалы</h2>
+{% if failures %}
+<ul class="fails">
+  {% for title, count in failures %}
+  <li><span>{{ title }}</span><span>не выполнен в {{ count }} из {{ row.calls }}</span></li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">За период провалов нет.</p>
+{% endif %}
+
+<h2>Звонки за период</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Дата</th><th>Запись</th><th>Балл</th><th>Где сорвался</th></tr></thead>
+  <tbody>
+  {% for call in calls %}
+  <tr>
+    <td>{{ (call.call_datetime or call.uploaded_at) | dt }}</td>
+    <td><a href="/calls/{{ call.id }}">{{ call.file_name }}</a></td>
+    <td><span class="score {{ call.score | grade(thresholds) }}">{{ call.score | score }}</span></td>
+    <td>{% if call.score.loss_item_id %}{{ titles.get(call.score.loss_item_id, call.score.loss_item_id) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

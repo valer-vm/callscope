@@ -1,0 +1,32 @@
+{# Выбор периода. Нужны: period_choice (PeriodChoice), period (Period), next_url. #}
+<style>
+.period{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;background:var(--card);
+border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:16px 0 20px}
+.period .seg{display:flex;flex-wrap:wrap;gap:6px}
+.period .seg button{font:inherit;font-weight:600;font-size:14px;background:var(--card);
+color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 14px;cursor:pointer}
+.period .seg button:hover{border-color:#cbd5e1}
+.period .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.period .custom{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:14px;
+color:var(--muted)}
+.period .custom input{font:inherit;font-size:14px;padding:4px 8px;border:1px solid #cbd5e1;
+border-radius:8px;color:var(--ink)}
+.period .shown{margin-left:auto;font-size:13px;color:var(--muted)}
+.period .shown b{color:var(--ink)}
+</style>
+<form method="post" action="/period" class="period" aria-label="Период">
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <div class="seg" role="group" aria-label="Готовые периоды">
+    {% for key, label in [("week", "Неделя"), ("4weeks", "4 недели"), ("quarter", "Квартал"), ("all", "Всё время")] %}
+    <button type="submit" name="preset" value="{{ key }}"{% if period_choice.preset == key %} class="on" aria-pressed="true"{% endif %}>{{ label }}</button>
+    {% endfor %}
+  </div>
+  <div class="custom">
+    <label for="period-start">Свои даты: с</label>
+    <input type="date" id="period-start" name="start" value="{{ period_choice.start.isoformat() if period_choice.start else '' }}">
+    <label for="period-end">по</label>
+    <input type="date" id="period-end" name="end" value="{{ period_choice.end.isoformat() if period_choice.end else '' }}">
+    <button type="submit" name="preset" value="custom" class="button small{% if period_choice.preset == 'custom' %} primary{% endif %}">Показать</button>
+  </div>
+  <div class="shown">Период: <b>{{ period.label }}</b></div>
+</form>

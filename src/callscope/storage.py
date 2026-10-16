@@ -17,10 +17,11 @@ import sqlite3
 import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
+from callscope import stats
 from callscope.checklist import CHECKLIST_FILE_NAME, Checklist, ChecklistItem, load_checklist
 from callscope.config import CONFIG_FILE_NAME, DEFAULTS_DIR, Thresholds, load_config
 from callscope.errors import CallScopeError, ConfigError
@@ -36,6 +37,7 @@ from callscope.model import (
     RawTranscript,
 )
 from callscope.scoring import summarize
+from callscope.stats import CallFilters
 
 log = logging.getLogger("callscope")
 
@@ -401,12 +403,11 @@ class Storage:
             corrections = self._corrections(db, [call_id])
         return self._record(row, corrections.get(call_id, {}), full=True)
 
-    def list_calls(self, filters: Any | None = None) -> list[CallRecord]:
+    def list_calls(self, filters: CallFilters | None = None) -> list[CallRecord]:
         """Звонки без сырой расшифровки и диалога, новые по дате звонка — сверху.
 
-        Без фильтров — все записи в любом статусе. С фильтрами (объект с полями
-        `stats.CallFilters`: period.start/end, manager, score_min, score_max, failed_item) —
-        только «готово», отобранные по действующей оценке.
+        Без фильтров — все записи в любом статусе. С `stats.CallFilters` — только «готово»,
+        отобранные `stats.apply_filters` по действующей оценке.
         """
         with self._connect() as db:
             sql = f"SELECT {_LIGHT} FROM calls"
@@ -420,7 +421,7 @@ class Storage:
         records = [self._record(r, corrections.get(int(r["id"]), {})) for r in rows]
         if filters is None:
             return records
-        return [r for r in records if _matches(r, filters)]
+        return stats.apply_filters(records, filters)
 
     def queue_overview(self, limit: int = 200) -> list[CallRecord]:
         """Последние загрузки (новые сверху) для списка на странице «Загрузка»."""
@@ -652,37 +653,3 @@ def _basis_from_json(text: str) -> tuple[Checklist, Thresholds]:
         ChecklistItem(id=i["id"], title=i["title"], weight=i["weight"]) for i in d["items"]
     )
     return Checklist(items=items), Thresholds(good=d["good"], medium=d["medium"])
-
-
-def _call_date(record: CallRecord) -> date:
-    moment = record.call_datetime or record.uploaded_at.astimezone()
-    return moment.date()
-
-
-def _matches(record: CallRecord, filters: Any) -> bool:
-    """Простой отбор по полям фильтра (полная логика — `stats.apply_filters`)."""
-    if record.status != "done" or record.score is None:
-        return False
-    period = getattr(filters, "period", None)
-    start = getattr(period, "start", None)
-    end = getattr(period, "end", None)
-    day = _call_date(record)
-    if start is not None and day < start:
-        return False
-    if end is not None and day > end:
-        return False
-    manager = getattr(filters, "manager", None)
-    if manager is not None and record.manager != manager:
-        return False
-    score_min = getattr(filters, "score_min", None)
-    if score_min is not None and record.score.score < score_min:
-        return False
-    score_max = getattr(filters, "score_max", None)
-    if score_max is not None and record.score.score > score_max:
-        return False
-    failed_item = getattr(filters, "failed_item", None)
-    if failed_item is not None and not any(
-        i.item_id == failed_item and i.status == "failed" for i in record.score.items
-    ):
-        return False
-    return True
