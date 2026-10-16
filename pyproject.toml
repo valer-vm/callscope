@@ -36,3 +36,4 @@ select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: медленный тест с настоящей моделью (CALLSCOPE_SLOW=1)"]

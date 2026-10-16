@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CallScope — отчёт по звонкам</title>
+<style>
+:root{--bg:#f7f8fa;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb;
+--good:#15803d;--good-bg:#dcfce7;--mid:#a16207;--mid-bg:#fef3c7;--bad:#b91c1c;--bad-bg:#fee2e2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+main{max-width:980px;margin:0 auto;padding:32px 20px 64px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:19px;margin:36px 0 12px}h3{font-size:16px;margin:0}
+.muted{color:var(--muted);font-size:13px}
+.conclusion{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--accent);
+border-radius:10px;padding:18px 22px;margin:20px 0;font-size:18px;font-weight:600}
+.kpis{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px}
+.kpi b{display:block;font-size:22px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:#f3f4f6;font-size:13px;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:0}
+.bar{height:10px;background:#e5e7eb;border-radius:5px;min-width:120px}
+.bar i{display:block;height:10px;background:var(--accent);border-radius:5px}
+.score{display:inline-block;min-width:52px;text-align:center;font-weight:700;border-radius:999px;padding:2px 12px}
+.good{color:var(--good);background:var(--good-bg)}.medium{color:var(--mid);background:var(--mid-bg)}
+.bad{color:var(--bad);background:var(--bad-bg)}
+.call{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:14px 0}
+.call-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.loss{margin:8px 0;font-size:14px}
+.note{background:var(--mid-bg);color:var(--mid);border-radius:6px;padding:4px 10px;font-size:13px;display:inline-block;margin:4px 6px 0 0}
+details{border-top:1px solid var(--line);margin-top:10px;padding-top:8px}
+summary{cursor:pointer;font-weight:600}
+.item{padding:8px 0;border-bottom:1px dashed var(--line)}
+.item:last-child{border-bottom:0}
+.st{font-size:12px;font-weight:700;border-radius:4px;padding:1px 8px;margin-right:6px}
+.st.passed{color:var(--good);background:var(--good-bg)}.st.failed{color:var(--bad);background:var(--bad-bg)}
+.st.na{color:var(--muted);background:#f3f4f6}
+blockquote{margin:6px 0 0;padding:4px 12px;border-left:3px solid var(--line);color:#374151}
+.tr p{margin:4px 0}.role{font-weight:700}.role.manager{color:var(--accent)}.role.client{color:#7c3aed}
+ul.plain{margin:0;padding-left:20px}
+@media print{body{background:#fff}main{max-width:none;padding:0}
+.call{break-inside:avoid-page}
+details>*{display:block !important}details{display:block}summary{list-style:none}
+.score,.st,.bar i{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<main>
+<h1>Анализ звонков отдела продаж</h1>
+<div class="muted">Папка: examples/calls · сформирован 16.10.2026 12:05</div>
+
+<div class="conclusion">Чаще всего звонки теряются на этапе «Выявление потребности (открытые вопросы)» — 1 из 5.</div>
+
+<div class="kpis">
+<div class="kpi"><b>5</b><span class="muted">звонков оценено</span></div>
+<div class="kpi"><b>69</b><span class="muted">средний балл</span></div>
+<div class="kpi"><b>3</b><span class="muted">менеджеров</span></div>
+
+</div>
+
+<h2>Менеджеры</h2>
+<table>
+<tr><th>Менеджер</th><th>Звонков</th><th>Средний балл</th><th>Чаще всего проваливает</th></tr>
+
+<tr><td>ivanov</td><td>2</td>
+<td><span class="score good">82</span></td>
+<td>Следующий шаг (1)</td></tr>
+
+<tr><td>petrova</td><td>2</td>
+<td><span class="score medium">68</span></td>
+<td>Выявление потребности (открытые вопросы) (1); Следующий шаг (1)</td></tr>
+
+<tr><td>sidorov</td><td>1</td>
+<td><span class="score bad">45</span></td>
+<td>Отработка возражения (1); Следующий шаг (1)</td></tr>
+
+</table>
+
+<h2>На каком этапе теряются звонки</h2>
+<table>
+<tr><th>Этап скрипта</th><th>Потеряно звонков</th><th></th></tr>
+
+<tr><td>Приветствие и представление</td><td>0</td>
+<td><div class="bar"><i style="width:0.0%"></i></div></td></tr>
+
+<tr><td>Выявление потребности (открытые вопросы)</td><td>1</td>
+<td><div class="bar"><i style="width:100.0%"></i></div></td></tr>
+
+<tr><td>Предложение решения</td><td>0</td>
+<td><div class="bar"><i style="width:0.0%"></i></div></td></tr>
+
+<tr><td>Отработка возражения</td><td>1</td>
+<td><div class="bar"><i style="width:100.0%"></i></div></td></tr>
+
+<tr><td>Следующий шаг</td><td>1</td>
+<td><div class="bar"><i style="width:100.0%"></i></div></td></tr>
+
+<tr><td>Прощание</td><td>0</td>
+<td><div class="bar"><i style="width:0.0%"></i></div></td></tr>
+
+</table>
+<p class="muted">Звонок считается потерянным на первом проваленном пункте чек-листа.</p>
+
+
+<h2>Рейтинг провалов по пунктам</h2>
+<table>
+<tr><th>Пункт</th><th>Раз провален</th><th></th></tr>
+
+<tr><td>Следующий шаг</td><td>3</td>
+<td><div class="bar"><i style="width:100.0%"></i></div></td></tr>
+
+<tr><td>Выявление потребности (открытые вопросы)</td><td>1</td>
+<td><div class="bar"><i style="width:33.333333333333336%"></i></div></td></tr>
+
+<tr><td>Отработка возражения</td><td>1</td>
+<td><div class="bar"><i style="width:33.333333333333336%"></i></div></td></tr>
+
+</table>
+
+
+<h2>Звонки</h2>
+
+<section class="call">
+<div class="call-head">
+<div><h3>ivanov_2026-10-12_1530.m4a</h3>
+<div class="muted">ivanov · 12.10.2026 15:30</div></div>
+<div><span class="score good">100</span>
+<span class="muted">Хороший</span></div>
+</div>
+<div class="loss">Этапа потери нет</div>
+
+
+<details>
+<summary>Разбор по пунктам чек-листа</summary>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Приветствие и представление</b>
+
+<div class="muted">Найдено в первых 2 репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:00 · Менеджер: «Здравствуйте, меня зовут Алексей, компания «Стройдом», чем могу помочь?»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Выявление потребности (открытые вопросы)</b>
+
+<div class="muted">Открытых вопросов в репликах менеджера: 2 (нужно 2).</div>
+<blockquote>00:10 · Менеджер: «Понятно, какая у вас площадь кухни и что сейчас лежит на полу?»</blockquote><blockquote>00:19 · Менеджер: «А как вы пользуетесь кухней, есть ли дети или животные?»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Предложение решения</b>
+
+<div class="muted">Найдено в репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:27 · Менеджер: «Тогда я предлагаю влагостой киломинод с плотным замком, он хорошо переносит воду.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Отработка возражения</b>
+
+<div class="muted">Возражений: 1, на каждое дан ответ по существу.</div>
+<blockquote>00:33 · Клиент: «Понятно, но дороговато получается.»</blockquote><blockquote>00:36 · Менеджер: «Давайте посчитаем вместе, такой пол прослужит много лет, а гарантия от производителя длинная.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Следующий шаг</b>
+
+<div class="muted">Найдено в репликах менеджера: 2 совп. (нужно 1).</div>
+<blockquote>00:45 · Менеджер: «Давайте я запишу вас на замер, вам удобно в четверг в одиннадцать?»</blockquote><blockquote>00:53 · Менеджер: «Отлично, мастер приедет в четверг в одиннадцать, спасибо за звонок, всего доброго!»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Прощание</b>
+
+<div class="muted">Найдено в последних 2 репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:53 · Менеджер: «Отлично, мастер приедет в четверг в одиннадцать, спасибо за звонок, всего доброго!»</blockquote>
+</div>
+
+</details>
+<details>
+<summary>Расшифровка</summary>
+<div class="tr">
+<p><span class="muted">00:00</span> <span class="role manager">Менеджер:</span> Здравствуйте, меня зовут Алексей, компания «Стройдом», чем могу помочь?</p><p><span class="muted">00:05</span> <span class="role client">Клиент:</span> Добрый день, хочу сделать ремонт на кухне, нужен ламинат.</p><p><span class="muted">00:10</span> <span class="role manager">Менеджер:</span> Понятно, какая у вас площадь кухни и что сейчас лежит на полу?</p><p><span class="muted">00:15</span> <span class="role client">Клиент:</span> Около 12 метров, старый линолиум.</p><p><span class="muted">00:19</span> <span class="role manager">Менеджер:</span> А как вы пользуетесь кухней, есть ли дети или животные?</p><p><span class="muted">00:23</span> <span class="role client">Клиент:</span> Да, у нас собака, и пол приходится часто мыть.</p><p><span class="muted">00:27</span> <span class="role manager">Менеджер:</span> Тогда я предлагаю влагостой киломинод с плотным замком, он хорошо переносит воду.</p><p><span class="muted">00:33</span> <span class="role client">Клиент:</span> Понятно, но дороговато получается.</p><p><span class="muted">00:36</span> <span class="role manager">Менеджер:</span> Давайте посчитаем вместе, такой пол прослужит много лет, а гарантия от производителя длинная.</p><p><span class="muted">00:43</span> <span class="role client">Клиент:</span> Ну ладно, это уже интереснее.</p><p><span class="muted">00:45</span> <span class="role manager">Менеджер:</span> Давайте я запишу вас на замер, вам удобно в четверг в одиннадцать?</p><p><span class="muted">00:51</span> <span class="role client">Клиент:</span> С четверг подойдет.</p><p><span class="muted">00:53</span> <span class="role manager">Менеджер:</span> Отлично, мастер приедет в четверг в одиннадцать, спасибо за звонок, всего доброго!</p><p><span class="muted">00:59</span> <span class="role client">Клиент:</span> До свидания.</p>
+</div>
+</details>
+</section>
+
+<section class="call">
+<div class="call-head">
+<div><h3>ivanov_2026-10-15_1145.m4a</h3>
+<div class="muted">ivanov · 15.10.2026 11:45</div></div>
+<div><span class="score medium">64</span>
+<span class="muted">Средний</span></div>
+</div>
+<div class="loss">Потерян на этапе: <b>Следующий шаг</b></div>
+
+
+<details>
+<summary>Разбор по пунктам чек-листа</summary>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Приветствие и представление</b>
+
+<div class="muted">Найдено в первых 2 репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:00 · Менеджер: «Добрый день! Компания «Строй дом», меня зовут Игорь.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Выявление потребности (открытые вопросы)</b>
+
+<div class="muted">Открытых вопросов в репликах менеджера: 2 (нужно 2).</div>
+<blockquote>00:08 · Менеджер: «Конечно, в какой комнате вы хотите потолок и какая там высота?»</blockquote><blockquote>00:16 · Менеджер: «А какой цвет вам нравится, и нужны ли светильники?»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Предложение решения</b>
+
+<div class="muted">Найдено в репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:23 · Менеджер: «Тогда я рекомендую матовое полотно со встроенными светильниками, оно смотрится очень аккуратно.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st na">Не применим</span><b>Отработка возражения</b>
+
+<div class="muted">Условие не сработало: собеседник не произнёс фраз-триггеров («дорого», «дороговато», «подумаю», «надо подумать»…).</div>
+
+</div>
+
+<div class="item">
+<span class="st failed">Провален</span><b>Следующий шаг</b>
+
+<div class="muted">В репликах менеджера нет ключевых фраз («замер», «замерщик», «встреча», «встретимся»…).</div>
+
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Прощание</b>
+
+<div class="muted">Найдено в последних 2 репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:33 · Менеджер: «Рад помочь, если появятся вопросы, звоните нам. До свидания!»</blockquote>
+</div>
+
+</details>
+<details>
+<summary>Расшифровка</summary>
+<div class="tr">
+<p><span class="muted">00:00</span> <span class="role manager">Менеджер:</span> Добрый день! Компания «Строй дом», меня зовут Игорь.</p><p><span class="muted">00:04</span> <span class="role client">Клиент:</span> Здравствуйте! Хочу узнать про натяжные потолки.</p><p><span class="muted">00:08</span> <span class="role manager">Менеджер:</span> Конечно, в какой комнате вы хотите потолок и какая там высота?</p><p><span class="muted">00:13</span> <span class="role client">Клиент:</span> В гостиной высота обычная.</p><p><span class="muted">00:16</span> <span class="role manager">Менеджер:</span> А какой цвет вам нравится, и нужны ли светильники?</p><p><span class="muted">00:20</span> <span class="role client">Клиент:</span> Белый матовый и светильники нужны.</p><p><span class="muted">00:23</span> <span class="role manager">Менеджер:</span> Тогда я рекомендую матовое полотно со встроенными светильниками, оно смотрится очень аккуратно.</p><p><span class="muted">00:29</span> <span class="role client">Клиент:</span> Звучит хорошо. Спасибо, всё понятно.</p><p><span class="muted">00:33</span> <span class="role manager">Менеджер:</span> Рад помочь, если появятся вопросы, звоните нам. До свидания!</p><p><span class="muted">00:39</span> <span class="role client">Клиент:</span> До свидания!</p>
+</div>
+</details>
+</section>
+
+<section class="call">
+<div class="call-head">
+<div><h3>petrova_2026-10-13_1015.m4a</h3>
+<div class="muted">petrova · 13.10.2026 10:15</div></div>
+<div><span class="score bad">36</span>
+<span class="muted">Плохой</span></div>
+</div>
+<div class="loss">Потерян на этапе: <b>Выявление потребности (открытые вопросы)</b></div>
+
+
+<details>
+<summary>Разбор по пунктам чек-листа</summary>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Приветствие и представление</b>
+
+<div class="muted">Найдено в первых 2 репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:00 · Менеджер: «Добрый день, компания «Стройдом», меня зовут Ольга.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st failed">Провален</span><b>Выявление потребности (открытые вопросы)</b>
+
+<div class="muted">Открытых вопросов в репликах менеджера: 0, нужно 2; закрытых вопросов («да/нет»): 2.</div>
+<blockquote>00:08 · Менеджер: «Вы уже выбирали плитку?»</blockquote><blockquote>00:12 · Менеджер: «Понятно, вам нужна глянцевая?»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Предложение решения</b>
+
+<div class="muted">Найдено в репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:18 · Менеджер: «Тогда я предлагаю нашу плитку из каталога, она многим подходит.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st na">Не применим</span><b>Отработка возражения</b>
+
+<div class="muted">Условие не сработало: собеседник не произнёс фраз-триггеров («дорого», «дороговато», «подумаю», «надо подумать»…).</div>
+
+</div>
+
+<div class="item">
+<span class="st failed">Провален</span><b>Следующий шаг</b>
+
+<div class="muted">В репликах менеджера нет ключевых фраз («замер», «замерщик», «встреча», «встретимся»…).</div>
+
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Прощание</b>
+
+<div class="muted">Найдено в последних 2 репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:33 · Менеджер: «Всего доброго, до свидания!»</blockquote>
+</div>
+
+</details>
+<details>
+<summary>Расшифровка</summary>
+<div class="tr">
+<p><span class="muted">00:00</span> <span class="role manager">Менеджер:</span> Добрый день, компания «Стройдом», меня зовут Ольга.</p><p><span class="muted">00:04</span> <span class="role client">Клиент:</span> Здравствуйте! Мне нужна плитка в ванную.</p><p><span class="muted">00:08</span> <span class="role manager">Менеджер:</span> Вы уже выбирали плитку?</p><p><span class="muted">00:10</span> <span class="role client">Клиент:</span> Нет, пока только смотрю.</p><p><span class="muted">00:12</span> <span class="role manager">Менеджер:</span> Понятно, вам нужна глянцевая?</p><p><span class="muted">00:15</span> <span class="role client">Клиент:</span> Наверное, я еще не знаю.</p><p><span class="muted">00:18</span> <span class="role manager">Менеджер:</span> Тогда я предлагаю нашу плитку из каталога, она многим подходит.</p><p><span class="muted">00:23</span> <span class="role client">Клиент:</span> Хорошо, а где можно посмотреть?</p><p><span class="muted">00:26</span> <span class="role manager">Менеджер:</span> Все есть в каталоге на сайте, если понадобится, звоните нам.</p><p><span class="muted">00:31</span> <span class="role client">Клиент:</span> Ладно, понятно.</p><p><span class="muted">00:33</span> <span class="role manager">Менеджер:</span> Всего доброго, до свидания!</p>
+</div>
+</details>
+</section>
+
+<section class="call">
+<div class="call-head">
+<div><h3>petrova_2026-10-16_0930.m4a</h3>
+<div class="muted">petrova · 16.10.2026 09:30</div></div>
+<div><span class="score good">100</span>
+<span class="muted">Хороший</span></div>
+</div>
+<div class="loss">Этапа потери нет</div>
+
+
+<details>
+<summary>Разбор по пунктам чек-листа</summary>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Приветствие и представление</b>
+
+<div class="muted">Найдено в первых 2 репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:00 · Менеджер: «Здравствуйте, меня зовут Ольга, компания «Строй дом», слушаю вас.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Выявление потребности (открытые вопросы)</b>
+
+<div class="muted">Открытых вопросов в репликах менеджера: 2 (нужно 2).</div>
+<blockquote>00:10 · Менеджер: «Конечно, какая у вас спальня по размеру и какое там покрытие.»</blockquote><blockquote>00:17 · Менеджер: «А для чего вам теплый пол, это основной отоплению или для комфорта?»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Предложение решения</b>
+
+<div class="muted">Найдено в репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:26 · Менеджер: «Тогда я предлагаю электрический нагревательный мат подламинот, он вам подойдет.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st na">Не применим</span><b>Отработка возражения</b>
+
+<div class="muted">Условие не сработало: собеседник не произнёс фраз-триггеров («дорого», «дороговато», «подумаю», «надо подумать»…).</div>
+
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Следующий шаг</b>
+
+<div class="muted">Найдено в репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:34 · Менеджер: «Наш мастер, давайте я запишу вас на замер, он приедет и все посмотрит.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Прощание</b>
+
+<div class="muted">Найдено в последних 2 репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:48 · Менеджер: «записала, спасибо за звонок, хорошего дня!»</blockquote>
+</div>
+
+</details>
+<details>
+<summary>Расшифровка</summary>
+<div class="tr">
+<p><span class="muted">00:00</span> <span class="role manager">Менеджер:</span> Здравствуйте, меня зовут Ольга, компания «Строй дом», слушаю вас.</p><p><span class="muted">00:05</span> <span class="role client">Клиент:</span> Добрый день, нужна консультация по тёплому полу в спальню.</p><p><span class="muted">00:10</span> <span class="role manager">Менеджер:</span> Конечно, какая у вас спальня по размеру и какое там покрытие.</p><p><span class="muted">00:14</span> <span class="role client">Клиент:</span> Двенадцать метров, будет ламинат.</p><p><span class="muted">00:17</span> <span class="role manager">Менеджер:</span> А для чего вам теплый пол, это основной отоплению или для комфорта?</p><p><span class="muted">00:23</span> <span class="role client">Клиент:</span> Для комфорта, чтобы утром ноги не мёрзли.</p><p><span class="muted">00:26</span> <span class="role manager">Менеджер:</span> Тогда я предлагаю электрический нагревательный мат подламинот, он вам подойдет.</p><p><span class="muted">00:32</span> <span class="role client">Клиент:</span> А кто его устанавливает?</p><p><span class="muted">00:34</span> <span class="role manager">Менеджер:</span> Наш мастер, давайте я запишу вас на замер, он приедет и все посмотрит.</p><p><span class="muted">00:39</span> <span class="role client">Клиент:</span> Давайте, а когда можно?</p><p><span class="muted">00:42</span> <span class="role manager">Менеджер:</span> Могу в среду в 10 утра, вам удобно? Тогда</p><p><span class="muted">00:45</span> <span class="role client">Клиент:</span> Да, в среду подойдёт.</p><p><span class="muted">00:48</span> <span class="role manager">Менеджер:</span> записала, спасибо за звонок, хорошего дня!</p><p><span class="muted">00:52</span> <span class="role client">Клиент:</span> Спасибо, до свидания.</p>
+</div>
+</details>
+</section>
+
+<section class="call">
+<div class="call-head">
+<div><h3>sidorov_2026-10-14_1400.m4a</h3>
+<div class="muted">sidorov · 14.10.2026 14:00</div></div>
+<div><span class="score bad">45</span>
+<span class="muted">Плохой</span></div>
+</div>
+<div class="loss">Потерян на этапе: <b>Отработка возражения</b></div>
+
+
+<details>
+<summary>Разбор по пунктам чек-листа</summary>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Приветствие и представление</b>
+
+<div class="muted">Найдено в первых 2 репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:00 · Менеджер: «Здравствуйте, строй дом, меня зовут Сергей.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Выявление потребности (открытые вопросы)</b>
+
+<div class="muted">Открытых вопросов в репликах менеджера: 2 (нужно 2).</div>
+<blockquote>00:07 · Менеджер: «Какие опна вы ищете и сколько их нужно?»</blockquote><blockquote>00:14 · Менеджер: «Что для вас главное, тепло или тишина?»</blockquote>
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Предложение решения</b>
+
+<div class="muted">Найдено в репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:20 · Менеджер: «Тогда я рекомендую двухкамерный пластиковый профиль, он хорошо глушит шум.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st failed">Провален</span><b>Отработка возражения</b>
+
+<div class="muted">Возражение «Тишина, у нас рядом дорога.» без ответа по существу: в следующих 2 реплики менеджера нет фраз отработки («скидка», «рассрочка», «гарантия», «выгода»…).</div>
+<blockquote>00:17 · Клиент: «Тишина, у нас рядом дорога.»</blockquote><blockquote>00:20 · Менеджер: «Тогда я рекомендую двухкамерный пластиковый профиль, он хорошо глушит шум.»</blockquote><blockquote>00:29 · Менеджер: «Три окна выйдут примерно в 45 тысяч рублей.»</blockquote>
+</div>
+
+<div class="item">
+<span class="st failed">Провален</span><b>Следующий шаг</b>
+
+<div class="muted">В репликах менеджера нет ключевых фраз («замер», «замерщик», «встреча», «встретимся»…).</div>
+
+</div>
+
+<div class="item">
+<span class="st passed">Выполнен</span><b>Прощание</b>
+
+<div class="muted">Найдено в последних 2 репликах менеджера: 1 совп. (нужно 1).</div>
+<blockquote>00:43 · Менеджер: «Хорошо, до свидания.»</blockquote>
+</div>
+
+</details>
+<details>
+<summary>Расшифровка</summary>
+<div class="tr">
+<p><span class="muted">00:00</span> <span class="role manager">Менеджер:</span> Здравствуйте, строй дом, меня зовут Сергей.</p><p><span class="muted">00:03</span> <span class="role client">Клиент:</span> Добрый день! Хочу заказать окна в квартиру.</p><p><span class="muted">00:07</span> <span class="role manager">Менеджер:</span> Какие опна вы ищете и сколько их нужно?</p><p><span class="muted">00:10</span> <span class="role client">Клиент:</span> Три окна, обычные, в спальню и в детскую.</p><p><span class="muted">00:14</span> <span class="role manager">Менеджер:</span> Что для вас главное, тепло или тишина?</p><p><span class="muted">00:17</span> <span class="role client">Клиент:</span> Тишина, у нас рядом дорога.</p><p><span class="muted">00:20</span> <span class="role manager">Менеджер:</span> Тогда я рекомендую двухкамерный пластиковый профиль, он хорошо глушит шум.</p><p><span class="muted">00:26</span> <span class="role client">Клиент:</span> Понятно, а сколько это будет стоить?</p><p><span class="muted">00:29</span> <span class="role manager">Менеджер:</span> Три окна выйдут примерно в 45 тысяч рублей.</p><p><span class="muted">00:32</span> <span class="role client">Клиент:</span> Ой, дороговато, я пока подумаю.</p><p><span class="muted">00:36</span> <span class="role manager">Менеджер:</span> Но, это наша цена, дешевле не получится.</p><p><span class="muted">00:40</span> <span class="role client">Клиент:</span> Понятно, тогда я позже позвоню.</p><p><span class="muted">00:43</span> <span class="role manager">Менеджер:</span> Хорошо, до свидания.</p>
+</div>
+</details>
+</section>
+
+
+
+
+
+</main>
+<script>
+// Перед печатью раскрываем все свёрнутые блоки.
+window.addEventListener("beforeprint",function(){document.querySelectorAll("details").forEach(function(d){d.setAttribute("open","")})});
+</script>
+</body>
+</html>

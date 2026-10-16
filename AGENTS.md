@@ -7,6 +7,12 @@
 
 | Команда | Что делает |
 |---------|------------|
+| `export UV_PROJECT_ENVIRONMENT=$HOME/.cache/callscope-venv` | Нужно здесь: в пути проекта есть «:», uv не может держать `.venv` внутри |
+| `uv sync` | Установить зависимости |
+| `uv run callscope analyze examples/calls` | Анализ папки звонков → `reports/<дата_время>/` |
+| `uv run python scripts/generate_examples.py` | Пересоздать тестовые звонки (`say`, macOS) |
+| `uv run ruff check src tests scripts && uv run pytest -q` | Линтер и тесты одной командой |
+| `CALLSCOPE_SLOW=1 uv run pytest tests/test_asr.py -q` | Медленный тест с реальной моделью |
 
 ## Как здесь работает Autopilot
 

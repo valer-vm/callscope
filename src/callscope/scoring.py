@@ -66,6 +66,7 @@ class _ItemScorer:
         self.dialogue = dialogue
         self.checklist = checklist
         self.norm = normalizer
+        self.position = {u.index: pos for pos, u in enumerate(dialogue.utterances)}
 
     # --- фразы и синонимы ---------------------------------------------------
 
@@ -190,10 +191,40 @@ class _ItemScorer:
         )
 
     def is_open_question(self, sentence: str, question_words: list[list[str]]) -> bool:
-        lemmas = self.norm.lemmas(sentence)
-        while lemmas and lemmas[0] in _QUESTION_LEAD_INS:
-            lemmas = lemmas[1:]
-        return any(word and lemmas[: len(word)] == word for word in question_words)
+        # Whisper часто ставит запятую вместо точки: «Понятно, какая площадь?» —
+        # после первой части из одного слова («Понятно», «Конечно») смотрим и вторую.
+        clauses = [c for c in _CLAUSE_BREAK.split(sentence) if self.norm.lemmas(c)]
+        candidates = clauses[:1]
+        if len(clauses) > 1 and len(self.norm.lemmas(clauses[0])) == 1:
+            candidates.append(clauses[1])
+        for clause in candidates:
+            lemmas = self.norm.lemmas(clause)
+            while lemmas and lemmas[0] in _QUESTION_LEAD_INS:
+                lemmas = lemmas[1:]
+            if any(word and lemmas[: len(word)] == word for word in question_words):
+                return True
+        return False
+
+    def questions(self, utterance: Utterance, question_words: list[list[str]]) -> list[str]:
+        """Вопросы реплики. Последнее предложение без «?» тоже вопрос, если начинается
+        с вопросительного слова и собеседник сразу ответил (whisper теряет «?»)."""
+        sentences = [s.strip() for s in _SENTENCE.findall(utterance.text) if s.strip()]
+        result = [s for s in sentences if s.endswith("?")]
+        position = self.position.get(utterance.index)
+        utterances = self.dialogue.utterances
+        answered = (
+            position is not None
+            and position + 1 < len(utterances)
+            and utterances[position + 1].role != utterance.role
+        )
+        if (
+            answered
+            and sentences
+            and not sentences[-1].endswith("?")
+            and self.is_open_question(sentences[-1], question_words)
+        ):
+            result.append(sentences[-1])
+        return result
 
     def score_open_questions(self, item: ChecklistItem) -> ItemResult:
         question_words = [self.norm.lemmas(p) for p in self.expand(item.phrases, item)]
@@ -201,9 +232,7 @@ class _ItemScorer:
         open_found: list[Utterance] = []
         closed_found: list[Utterance] = []
         for utterance in window:
-            questions = [
-                s.strip() for s in _SENTENCE.findall(utterance.text) if s.strip().endswith("?")
-            ]
+            questions = self.questions(utterance, question_words)
             if not questions:
                 continue
             if any(self.is_open_question(q, question_words) for q in questions):

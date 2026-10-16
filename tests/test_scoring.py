@@ -366,3 +366,55 @@ def test_negation_in_previous_clause_does_not_cancel_farewell(default_checklist,
         "farewell"
     ]
     assert farewell.status == "passed"
+
+
+# --- устойчивость к пунктуации распознавания (whisper) --------------------------
+
+
+def _need_status(normalizer, *lines: tuple[str, str]) -> str:
+    item = ChecklistItem(
+        id="need",
+        title="Потребность",
+        weight=1,
+        rule="open_questions",
+        phrases=("какой", "как", "сколько"),
+    )
+    dialogue = make_dialogue(*lines)
+    return score_call(dialogue, Checklist(items=(item,)), THRESHOLDS, normalizer).items[0].status
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Понятно, какая у вас площадь кухни?",
+        "Конечно, в какой комнате вы хотите потолок?",
+    ],
+)
+def test_open_question_after_interjection_comma(normalizer, question):
+    # Whisper пишет «Понятно, какая…» вместо «Понятно. Какая…».
+    assert _need_status(normalizer, ("manager", question), ("client", "Двенадцать метров.")) == (
+        "passed"
+    )
+
+
+def test_interjection_comma_does_not_open_closed_question(normalizer):
+    assert _need_status(normalizer, ("manager", "Понятно, вам нужна глянцевая?")) == "failed"
+
+
+def test_question_without_mark_answered_by_client_counts(normalizer):
+    # Whisper потерял «?» в конце реплики, клиент сразу ответил.
+    lines = (
+        ("manager", "Конечно, какая у вас спальня по размеру и какое там покрытие."),
+        ("client", "Двенадцать метров, будет ламинат."),
+    )
+    assert _need_status(normalizer, *lines) == "passed"
+
+
+def test_statement_without_reply_is_not_question(normalizer):
+    lines = (
+        ("manager", "Тогда я расскажу, как мы работаем."),
+        ("client", "Хорошо."),
+        ("manager", "Какой хороший день."),
+    )
+    assert _need_status(normalizer, *lines) == "failed"
+
