@@ -157,7 +157,9 @@ class Worker:
             )
             self.storage.save_result(record.id, raw, result, checklist, config.thresholds)
         except AudioError as exc:
-            self.storage.save_error(record.id, exc.message_ru)
+            # На диске запись лежит под служебным именем — в статусе нужно исходное.
+            message = exc.message_ru.replace(record.audio_path.name, record.file_name)
+            self.storage.save_error(record.id, message)
         except CallScopeError as exc:  # модель не загрузилась, настройки с ошибкой
             log.error("Запись %s не обработана: %s", record.file_name, exc.message_ru)
             self.storage.save_error(record.id, exc.message_ru)

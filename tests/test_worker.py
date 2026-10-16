@@ -7,7 +7,7 @@ import pytest
 
 from callscope.checklist import load_checklist
 from callscope.config import load_config
-from callscope.errors import CallScopeError
+from callscope.errors import AudioError, CallScopeError
 from callscope.storage import Storage
 from callscope.worker import Worker
 
@@ -84,6 +84,20 @@ def test_audio_error_does_not_stop_queue_and_retry(storage, fake_transcriber_cls
     broken.audio_path.write_text("good.json", encoding="utf-8")
     worker.run_once()
     assert storage.get(broken.id).status == "done"
+
+
+def test_audio_error_shows_original_file_name(storage, fake_transcriber_cls):
+    class Broken(fake_transcriber_cls):
+        def transcribe(self, path, mono_turn_gap, on_progress=None):
+            raise AudioError(f"Не удалось прочитать запись {path.name}: файл повреждён.")
+
+    record, _ = storage.add_upload("bad_2026-10-10_1000.mp3", b"junk")
+    assert record.audio_path.name != record.file_name
+    _worker(storage, Broken()).run_once()
+    got = storage.get(record.id)
+    assert got.status == "error"
+    assert "bad_2026-10-10_1000.mp3" in got.error
+    assert record.audio_path.name not in got.error
 
 
 def test_model_error_marks_call_error(storage, fake_transcriber_cls):
