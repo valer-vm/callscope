@@ -161,3 +161,53 @@ def test_correction_uses_weights_of_auto_score_until_rescore(
     rescore_all(storage, config, checklist, normalizer)
     # по новым весам: (50 + 20 + 15 + 5) / (50 + 20 + 15 + 25 + 5) = 78.3
     assert storage.get(call_id).score.score == 78.3
+
+
+def test_reapply_template_clears_stale_template_warning(storage, raw_from_fixture, normalizer):
+    call_id = _done(storage, raw_from_fixture, normalizer, "2026-10-12_1530_petrova.m4a",
+                    "good.json")
+    assert any(pipeline.is_template_warning(w) for w in storage.get(call_id).warnings)
+    config, _ = _settings(storage)
+    reapply_template(storage, replace(config, filename_template="{date}_{time}_{manager}"))
+    assert not any(pipeline.is_template_warning(w) for w in storage.get(call_id).warnings)
+
+
+def test_rescore_template_warning_names_stored_manager_once(
+    storage, raw_from_fixture, normalizer
+):
+    call_id = _done(storage, raw_from_fixture, normalizer, "petrova-12-10.m4a", "good.json")
+    from callscope.model import CallMeta
+
+    # Менеджера руководитель видел как «petrova» (так он записан у звонка).
+    storage.update_meta(call_id, CallMeta("petrova-12-10.m4a", "petrova", None, False))
+    config, checklist = _settings(storage)
+    rescore_call(storage, call_id, config, checklist, normalizer)
+    template = [w for w in storage.get(call_id).warnings if pipeline.is_template_warning(w)]
+    assert len(template) == 1
+    assert "менеджер «petrova»" in template[0]
+
+
+def test_rescore_does_not_overwrite_sides_swapped_meanwhile(
+    storage, raw_from_fixture, normalizer, monkeypatch
+):
+    """Переоценка всех звонков, во время которой руководитель поменял стороны."""
+    from callscope import rescoring
+
+    call_id = _done(storage, raw_from_fixture, normalizer, "ivanov_2026-10-12_1530.m4a",
+                    "good.json")
+    config, checklist = _settings(storage)
+    real_analyze = rescoring.analyze_raw
+    swapped = []
+
+    def analyze_then_swap(*args, **kwargs):
+        result = real_analyze(*args, **kwargs)
+        if not swapped:  # пока переоценка считала, стороны поменяли
+            swapped.append(1)
+            swap_sides(storage, call_id, config, checklist, normalizer)
+        return result
+
+    monkeypatch.setattr(rescoring, "analyze_raw", analyze_then_swap)
+    rescore_call(storage, call_id, config, checklist, normalizer)
+    after = storage.get(call_id)
+    assert after.manager_channel == "right"
+    assert after.dialogue.manager_channel == "right"

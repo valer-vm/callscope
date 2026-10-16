@@ -391,6 +391,9 @@ def import_folder(
 
     queued = known = from_cache = 0
     for audio in recordings:
+        # Кэш копируется ДО постановки в очередь: иначе работающая панель может успеть
+        # взять запись и расшифровать её моделью заново.
+        cached = stage1 is not None and _copy_cached(audio, stage1, panel_cache, model, config)
         try:
             _record, is_new = storage.add_upload(audio.name, audio)
         except OSError as exc:
@@ -400,7 +403,7 @@ def import_folder(
             known += 1
             continue
         queued += 1
-        if stage1 is not None and _copy_cached(audio, stage1, panel_cache, model, config):
+        if cached:
             from_cache += 1
 
     typer.echo(f"Записи из {path}: поставлено {queued}, уже были {known}.")

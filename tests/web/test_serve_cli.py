@@ -139,6 +139,30 @@ def test_import_reuses_stage1_cache(tmp_path, raw_from_fixture):
     assert RawTranscript.from_json(json.loads(copied.read_text(encoding="utf-8"))) == raw
 
 
+def test_import_puts_cache_before_queueing(tmp_path, raw_from_fixture, monkeypatch):
+    """Панель может забрать запись сразу после постановки — расшифровка уже должна ждать."""
+    folder = _recordings(tmp_path / "calls")
+    data = tmp_path / "data"
+    storage = Storage(data)
+    config = load_config(storage.config_path)
+    audio = folder / "ivanov_2026-10-12_1530.m4a"
+    stage1 = TranscriptCache(folder / ".callscope-cache")
+    key = stage1.key(audio, config.model_path or config.model_size, config.mono_turn_gap)
+    stage1.put(key, raw_from_fixture("good.json"))
+    seen_at_queue: list[bool] = []
+    real_add = Storage.add_upload
+
+    def add_upload(self, file_name, content):
+        if file_name == audio.name:
+            seen_at_queue.append((data / "cache" / f"{key}.json").exists())
+        return real_add(self, file_name, content)
+
+    monkeypatch.setattr(Storage, "add_upload", add_upload)
+    result = CliRunner().invoke(cli.app, ["import", str(folder), "--data-dir", str(data)])
+    assert result.exit_code == 0, result.output
+    assert seen_at_queue == [True]
+
+
 def test_import_missing_folder_exits_2(tmp_path):
     result = CliRunner().invoke(cli.app, ["import", str(tmp_path / "nope"),
                                           "--data-dir", str(tmp_path / "d")])

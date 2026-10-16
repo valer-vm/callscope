@@ -484,16 +484,31 @@ class Storage:
         result: CallResult,
         checklist: Checklist | None = None,
         thresholds: Thresholds | None = None,
-    ) -> None:
+        expected_channel: ManagerChannelChoice | None = None,
+    ) -> bool:
         """Новая авто-оценка (переоценка, смена сторон). Менеджер и дата не меняются
         (это `update_meta`); правки сохраняются, правки отсутствующих пунктов удаляются.
-        `checklist`/`thresholds` — как в `save_result`."""
+        `checklist`/`thresholds` — как в `save_result`.
+
+        `expected_channel` — выбор стороны, по которому посчитан `result`: если его успели
+        поменять («Поменять стороны» во время переоценки), запись пропускается, чтобы
+        не затереть свежую оценку. Возвращает, записано ли."""
         basis = self._basis(checklist, thresholds)
         with self._transaction() as db:
-            if self._exists(db, call_id):
-                self._write_analysis(db, call_id, result, basis)
+            row = db.execute(
+                "SELECT manager_channel FROM calls WHERE id = ?", (call_id,)
+            ).fetchone()
+            if row is None:
+                return False
+            if expected_channel is not None and row["manager_channel"] != expected_channel:
+                return False
+            self._write_analysis(db, call_id, result, basis)
+            return True
 
-    def update_meta(self, call_id: int, meta: CallMeta) -> None:
+    def update_meta(
+        self, call_id: int, meta: CallMeta, warnings: tuple[str, ...] | None = None
+    ) -> None:
+        """Менеджер и дата из имени файла; `warnings` — заменить и предупреждения звонка."""
         with self._connect() as db:
             db.execute(
                 "UPDATE calls SET manager = ?, call_datetime = ?, matched_template = ? "
@@ -505,6 +520,11 @@ class Storage:
                     call_id,
                 ),
             )
+            if warnings is not None:
+                db.execute(
+                    "UPDATE calls SET warnings_json = ? WHERE id = ?",
+                    (json.dumps(list(warnings), ensure_ascii=False), call_id),
+                )
 
     def delete(self, call_id: int) -> None:
         """Удаляет звонок, его правки и файл записи. Без корзины."""

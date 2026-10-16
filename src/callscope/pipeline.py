@@ -48,6 +48,22 @@ def transcript_for(
     return raw, False
 
 
+# Общая метка предупреждения о шаблоне имени: по ней пересчёты находят и заменяют его.
+TEMPLATE_WARNING_MARK = "имя не подходит под шаблон"
+
+
+def template_warning(file_name: str, config: AppConfig, manager: str) -> str:
+    """Предупреждение «имя файла не подошло под шаблон» с менеджером, который записан."""
+    return (
+        f"{file_name}: {TEMPLATE_WARNING_MARK} «{config.filename_template}» — "
+        f"менеджер «{manager}»."
+    )
+
+
+def is_template_warning(text: str) -> bool:
+    return TEMPLATE_WARNING_MARK in text
+
+
 def analyze_raw(
     file_name: str,
     raw: RawTranscript,
@@ -63,10 +79,7 @@ def analyze_raw(
     )
     warnings: list[str] = []
     if not meta.matched_template:
-        warnings.append(
-            f"{file_name}: имя не подходит под шаблон «{config.filename_template}» — "
-            f"менеджер «{meta.manager}»."
-        )
+        warnings.append(template_warning(file_name, config, meta.manager))
     dialogue, role_warnings = assign_roles(raw, config, file_name, manager_channel)
     warnings.extend(role_warnings)
     score = score_call(dialogue, checklist, config.thresholds, normalizer)

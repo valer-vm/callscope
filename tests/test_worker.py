@@ -266,3 +266,54 @@ def test_rescore_failure_in_thread_does_not_kill_worker(
         assert _wait(lambda: storage.get(record.id).status == "done")
     finally:
         worker.stop()
+
+
+def test_rescore_requested_again_mid_pass_stays_running(
+    storage, fake_transcriber_cls, monkeypatch
+):
+    from callscope import worker as worker_module
+
+    worker = _worker(storage, fake_transcriber_cls())
+    passes: list[int] = []
+
+    def rescore_all(*args, **kwargs):
+        passes.append(1)
+        if len(passes) == 1:
+            worker.request_rescore()  # руководитель снова нажал «Переоценить»
+        return 0
+
+    monkeypatch.setattr(worker_module, "rescore_all", rescore_all)
+    worker.request_rescore()
+    assert worker.run_once() is True
+    assert worker.rescore_status.state == "running"  # второй проход ещё впереди
+    assert worker.run_once() is True
+    assert worker.rescore_status.state == "done"
+    assert len(passes) == 2
+
+
+def test_call_deleted_during_processing_is_gone_and_queue_continues(
+    storage, fake_transcriber_cls
+):
+    started, release = threading.Event(), threading.Event()
+
+    class Blocking(fake_transcriber_cls):
+        def transcribe(self, path, mono_turn_gap, on_progress=None):
+            if not started.is_set():
+                started.set()
+                release.wait(10)
+            return super().transcribe(path, mono_turn_gap, on_progress)
+
+    first, _ = storage.add_upload("first.mp3", b"good.json")
+    second, _ = storage.add_upload("second.mp3", b"no_need.json")
+    worker = _worker(storage, Blocking())
+    runner = threading.Thread(target=worker.run_once)
+    runner.start()
+    try:
+        assert started.wait(5)
+        storage.delete(first.id)
+    finally:
+        release.set()
+        runner.join(5)
+    assert storage.get(first.id) is None
+    assert worker.run_once() is True
+    assert storage.get(second.id).status == "done"

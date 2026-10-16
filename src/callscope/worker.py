@@ -185,10 +185,16 @@ class Worker:
         except Exception:  # любой сбой переоценки — в статус, воркер работает дальше
             log.exception("Сбой переоценки")
             error = "Переоценка прервана внутренней ошибкой — подробности в журнале."
-        current = self.rescore_status
-        self._set_rescore(
-            RescoreStatus("done", current.done, current.total, datetime.now(UTC), error)
-        )
+        with self._state_lock:
+            if self._rescore_requested:
+                # Пока шёл этот проход, переоценку запросили снова (например, после новой
+                # правки чек-листа): «готово» показывать рано — следующий проход впереди.
+                self._rescore = RescoreStatus("running", 0, self._rescore.total)
+            else:
+                current = self._rescore
+                self._rescore = RescoreStatus(
+                    "done", current.done, current.total, datetime.now(UTC), error
+                )
 
     def _transcriber_for(self, config: AppConfig) -> Transcriber:
         """Модель создаётся лениво один раз; заново — только если сменили модель в настройках."""

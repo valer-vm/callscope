@@ -13,7 +13,7 @@ from callscope.config import AppConfig
 from callscope.errors import CallScopeError
 from callscope.filenames import parse_filename
 from callscope.model import CallMeta
-from callscope.pipeline import analyze_raw
+from callscope.pipeline import analyze_raw, is_template_warning, template_warning
 from callscope.storage import Storage
 from callscope.textnorm import Normalizer
 
@@ -49,12 +49,17 @@ def rescore_call(
         call_datetime=record.call_datetime,
         matched_template=record.matched_template,
     )
-    # Предупреждение о шаблоне имени относится к новому разбору, а менеджер остался прежним.
-    warnings = tuple(w for w in result.warnings if "не подходит под шаблон" not in w)
+    # Предупреждение о шаблоне строится от сохранённых менеджера и даты, а не от нового
+    # разбора имени: переоценка их не меняет.
+    warnings = [w for w in result.warnings if not is_template_warning(w)]
     if not record.matched_template:
-        warnings = tuple(result.warnings)
+        warnings.insert(0, template_warning(record.file_name, config, record.manager))
     storage.update_analysis(
-        call_id, replace(result, meta=meta, warnings=warnings), checklist, config.thresholds
+        call_id,
+        replace(result, meta=meta, warnings=tuple(warnings)),
+        checklist,
+        config.thresholds,
+        expected_channel=record.manager_channel,
     )
 
 
@@ -104,7 +109,9 @@ def reapply_template(storage: Storage, config: AppConfig) -> tuple[int, int]:
             record.file_name, config.filename_template, config.date_format, config.time_format
         )
         if meta.matched_template:
-            storage.update_meta(record.id, meta)
+            # Имя теперь подошло — старое предупреждение о шаблоне больше не верно.
+            warnings = tuple(w for w in record.warnings if not is_template_warning(w))
+            storage.update_meta(record.id, meta, warnings)
             updated += 1
         else:
             unmatched += 1
