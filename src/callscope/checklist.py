@@ -20,6 +20,7 @@ _ITEM_FIELDS = {
     "weight",
     "speaker",
     "phrases",
+    "statement_phrases",
     "synonyms",
     "window",
     "window_size",
@@ -38,6 +39,7 @@ class ChecklistItem:
     weight: float
     speaker: Role = "manager"
     phrases: tuple[str, ...] = ()
+    statement_phrases: tuple[str, ...] = ()
     synonyms: dict[str, tuple[str, ...]] = field(default_factory=dict)
     window: Literal["all", "first", "last"] = "all"
     window_size: int = 3
@@ -145,7 +147,8 @@ def _parse_item(path: Path, number: int, data: Any, seen: set[str]) -> Checklist
         raise errors.fail("weight", "нужно число больше нуля")
 
     phrases = errors.phrase_list(data, "phrases")
-    if not phrases:
+    statement_phrases = errors.phrase_list(data, "statement_phrases")
+    if not phrases and not statement_phrases:
         raise errors.fail("phrases", "нужна хотя бы одна ключевая фраза")
 
     description = data.get("description", "")
@@ -158,6 +161,7 @@ def _parse_item(path: Path, number: int, data: Any, seen: set[str]) -> Checklist
         weight=float(weight),
         speaker=errors.choice(data, "speaker", "manager", ("manager", "client")),
         phrases=phrases,
+        statement_phrases=statement_phrases,
         synonyms=parse_synonyms(data.get("synonyms"), errors.fail),
         window=errors.choice(data, "window", "all", ("all", "first", "last")),
         window_size=errors.positive_int(data, "window_size", 3),

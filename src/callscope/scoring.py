@@ -59,10 +59,14 @@ _NEGATION_FILLERS = frozenset(
     "сегодня теперь давно никакой".split()
 )
 # Фраза-триггер, за которой сразу идёт вопросительное слово, — уточнение, а не
-# возражение: «не уверен, какая площадь».
+# возражение: «не уверен, какая площадь». «Когда» сюда не входит: «подумаю, когда
+# будут деньги» — условие, а не вопрос.
 _CLARIFYING_WORDS = frozenset(
-    "какой каков сколько где когда как куда откуда зачем почему который чей".split()
+    "какой каков сколько где как куда откуда зачем почему который чей".split()
 )
+# statement_phrases не засчитываются в вопросе и рядом с отрицанием: «Вам нужен счёт?»,
+# «Договор не нужен».
+_STATEMENT_NEGATIONS = frozenset({"не", "нет", "без"})
 
 
 @lru_cache(maxsize=1)
@@ -129,10 +133,18 @@ class _ItemScorer:
         return tuple(" ".join(v) for v in variants if v)
 
     def matches(
-        self, utterance: Utterance, phrases: tuple[str, ...], *, as_trigger: bool = False
+        self,
+        utterance: Utterance,
+        phrases: tuple[str, ...],
+        *,
+        as_trigger: bool = False,
+        statement_only: bool = False,
     ) -> bool:
-        """Есть ли в реплике фраза без отрицания (для триггера — и не уточняющий вопрос)."""
+        """Есть ли в реплике фраза без отрицания (для триггера — и не уточняющий вопрос;
+        для statement_only — не в вопросе и без «не»/«нет» во всей части предложения)."""
         for sentence in _SENTENCE.findall(utterance.text):
+            if statement_only and sentence.rstrip().endswith("?"):
+                continue
             # Отрицание ищется только в той же части предложения (до запятой и т.п.):
             # «Есть рассрочка, переплат нет» — «нет» относится не к рассрочке.
             lemmas: list[str] = []
@@ -162,6 +174,10 @@ class _ItemScorer:
                         continue
                     if as_trigger and end < len(lemmas) and lemmas[end] in _CLARIFYING_WORDS:
                         continue
+                    if statement_only and _STATEMENT_NEGATIONS.intersection(
+                        clauses[clause_of[start]]
+                    ):
+                        continue
                     return True
         return False
 
@@ -174,8 +190,11 @@ class _ItemScorer:
             skipped += 1
         if not skipped or not rest or _NEGATION_AFTER not in rest[0]:
             return False
-        before = rest[0][: rest[0].index(_NEGATION_AFTER)]
-        return all(lemma in _NEGATION_FILLERS for lemma in before)
+        # «Скидок, к сожалению, нет» — отрицание; «Рассрочка, конечно, нет проблем» —
+        # «нет» про проблемы, а не про рассрочку.
+        position = rest[0].index(_NEGATION_AFTER)
+        around = rest[0][:position] + rest[0][position + 1 :]
+        return all(lemma in _NEGATION_FILLERS for lemma in around)
 
     # --- окна реплик --------------------------------------------------------
 
@@ -206,8 +225,13 @@ class _ItemScorer:
 
     def score_phrases(self, item: ChecklistItem) -> ItemResult:
         phrases = self.expand(item.phrases, item)
+        statements = self.expand(item.statement_phrases, item)
         window = self.window(item)
-        found = [u for u in window if self.matches(u, phrases)]
+        found = [
+            u
+            for u in window
+            if self.matches(u, phrases) or self.matches(u, statements, statement_only=True)
+        ]
         where = self.window_label(item)
         if len(found) >= item.min_matches:
             return ItemResult(
@@ -223,7 +247,8 @@ class _ItemScorer:
             )
             evidence = found
         else:
-            reason = f"{where.capitalize()} нет ключевых фраз ({_quote_list(item.phrases)})."
+            all_phrases = item.phrases + item.statement_phrases
+            reason = f"{where.capitalize()} нет ключевых фраз ({_quote_list(all_phrases)})."
             if item.window == "first":
                 evidence = window[:1]
             elif item.window == "last":

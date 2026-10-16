@@ -440,3 +440,46 @@ def test_road_is_not_expensive(default_checklist, normalizer):
 def test_rare_parse_does_not_match_other_word(normalizer):
     assert not normalizer.contains_phrase("Дорога до объекта плохая", "дорого")
     assert normalizer.contains_phrase("Это дорогое удовольствие", "дорого")
+
+
+@pytest.mark.parametrize(
+    "objection",
+    ["Я подумаю, когда будут деньги.", "В другой фирме предлагали дешевле."],
+)
+def test_more_objection_wordings_trigger(default_checklist, normalizer, objection):
+    status = objection_status(
+        default_checklist, normalizer, ("client", objection), ("manager", "Хорошо.")
+    )
+    assert status == "failed"
+
+
+def test_affirmation_after_parenthetical_is_not_negation(default_checklist, normalizer):
+    status = objection_status(
+        default_checklist,
+        normalizer,
+        ("client", "Дорого, можно в рассрочку?"),
+        ("manager", "Рассрочка, конечно, нет проблем."),
+    )
+    assert status == "passed"
+
+
+def test_agreed_visit_is_next_step(default_checklist, normalizer):
+    text = "Договорились, жду вас в четверг в одиннадцать."
+    assert next_step_status(default_checklist, normalizer, text) == "passed"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Вам нужен счёт?",
+        "А договор вам нужен?",
+        "Замер нужен?",
+        "Договор не нужен.",
+        "Счёт мы не выставляем.",
+        "Нет, замер не делаем.",
+    ],
+)
+def test_bare_document_word_in_question_or_negation_is_not_next_step(
+    default_checklist, normalizer, text
+):
+    assert next_step_status(default_checklist, normalizer, text) == "failed"
