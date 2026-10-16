@@ -10,7 +10,7 @@
 | Расшифровка | `asr.Transcriber` (+ `cache.TranscriptCache`) | аудио → `RawTranscript` (сегменты со стороной left/right) |
 | Роли | `roles.assign_roles` | `RawTranscript` → `Dialogue` (реплики manager/client) + предупреждения |
 | Оценка | `scoring.score_call` | `Dialogue` + `Checklist` → `CallScore` |
-| Перепроверка | `semantic.recheck` | только failed-пункты, через Ollama; вызывает CLI, если включено |
+| Перепроверка | `semantic.recheck` | failed-пункты и `na` с условием (`trigger`), через Ollama; вызывают `pipeline.analyze_raw` при `semantic.enabled` (CLI, очередь, переоценка) |
 | Сводка | `aggregate.build_summary` | `CallResult[]` → `Summary` |
 | Отчёты | `report_html.write_html`, `report_xlsx.write_xlsx` | читают только `Summary` |
 

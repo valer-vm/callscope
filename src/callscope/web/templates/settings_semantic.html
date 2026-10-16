@@ -1,0 +1,64 @@
+{% extends "settings_checklist.html" %}
+{% block head %}{{ super() }}
+<style>
+.f.toggle{flex-direction:row;align-items:flex-start;gap:10px;cursor:pointer}
+.f.toggle input{width:18px;height:18px;margin:2px 0 0;flex-shrink:0;accent-color:var(--accent)}
+</style>
+{% endblock %}
+{% block content %}
+<nav class="tabs" aria-label="Разделы настроек">
+  <a href="/settings/checklist"{% if tab == "checklist" %} class="active" aria-current="page"{% endif %}>Чек-лист</a>
+  <a href="/settings/filename"{% if tab == "filename" %} class="active" aria-current="page"{% endif %}>Имя файла</a>
+  <a href="/settings/semantic"{% if tab == "semantic" %} class="active" aria-current="page"{% endif %}>Смысловая проверка</a>
+</nav>
+<h1>Смысловая проверка</h1>
+<p class="muted lead">Пункты, не найденные по ключевым фразам, может перепроверить локальная нейросеть Ollama — она понимает смысл, даже когда менеджер сказал нужное своими словами, и находит возражения, сказанные не по списку. Решение модели принимается, только если она привела цитату, которая действительно есть в звонке. Записи и расшифровки не покидают этот компьютер.</p>
+
+{% if saved %}
+<div class="alert good" role="status">Сохранено. {% if values.enabled %}Новые звонки будут проверяться моделью. Чтобы перепроверить уже загруженные, нажмите «Переоценить все звонки» на вкладке <a href="/settings/checklist#rescore">Чек-лист</a> — с моделью это заметно дольше.{% else %}Смысловая проверка выключена: оценка только по ключевым фразам.{% endif %}</div>
+{% endif %}
+{% if errors %}
+<div class="alert bad" role="alert"><b>Не сохранено — настройки не изменены.</b>{% if errors.get("_") %} {{ errors["_"] }}{% endif %}</div>
+{% endif %}
+
+<section class="card" data-ollama-status>
+  <div class="card-text">
+    <h2>Ollama</h2>
+    {% if status.reachable %}
+    <p class="check-result ok">Работает по адресу <code>{{ url }}</code>. Скачанные модели: {% if status.models %}{{ status.models|join(", ") }}{% else %}нет{% endif %}.</p>
+    {% if not model_installed %}
+    <p class="check-result no">Модель «{{ values.model }}» не скачана. Скачайте её командой <code>ollama pull {{ values.model }}</code>{% if status.models %} или выберите одну из скачанных{% endif %}.</p>
+    {% endif %}
+    {% else %}
+    <p class="check-result no">Ollama не отвечает по адресу <code>{{ url }}</code> ({{ status.error }}). Пока она не запущена, звонки оцениваются только по ключевым фразам.</p>
+    <p class="muted small">Установите Ollama с сайта ollama.com (на Mac можно <code>brew install ollama</code>), запустите её и скачайте модель: <code>ollama pull {{ values.model }}</code>. Адрес меняется в <code>callscope.yaml</code> папки данных (поле <code>semantic.url</code>) и может быть только на этом компьютере.</p>
+    {% endif %}
+  </div>
+</section>
+
+<form method="post" action="/settings/semantic" class="form-narrow" novalidate>
+  <div class="grid">
+    <label class="f wide toggle">
+      <input type="checkbox" name="enabled" value="1"{% if values.enabled %} checked{% endif %}>
+      <span><span class="lab">Перепроверять звонки моделью</span><br>
+      <span class="hint">Работает для новых звонков и при переоценке. Если Ollama недоступна, звонок всё равно оценится — по ключевым фразам, с предупреждением.</span></span>
+    </label>
+    <label class="f wide{% if errors.get('model') %} invalid{% endif %}">
+      <span class="lab">Модель</span>
+      <input type="text" name="model" value="{{ values.model }}" list="semantic-models" spellcheck="false" autocomplete="off">
+      <datalist id="semantic-models">
+        {% for name, note in known_models %}<option value="{{ name }}">{{ note }}</option>{% endfor %}
+        {% for name in status.models %}<option value="{{ name }}"></option>{% endfor %}
+      </datalist>
+      <span class="hint">Проверены на чек-листе по умолчанию:{% for name, note in known_models %} <code>{{ name }}</code> — {{ note }}{% if not loop.last %};{% endif %}{% endfor %}. Проверка идёт только по пунктам, которые не нашлись по фразам.</span>
+      {% if errors.get("model") %}<div class="field-error" role="alert">{{ errors.model }}</div>{% endif %}
+    </label>
+  </div>
+  <div class="savebar">
+    <span class="muted small">{{ rescore.message }}</span>
+    <span class="spacer"></span>
+    <button type="submit" class="button primary">Сохранить</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}{% endblock %}

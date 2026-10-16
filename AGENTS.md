@@ -6,11 +6,12 @@
 В рабочей папке (в пути есть «:») сначала: `export UV_PROJECT_ENVIRONMENT=$HOME/.cache/callscope-venv`; в пути без «:» не нужно.
 
 - `uv sync` — зависимости.
-- `uv run ruff check src tests scripts && uv run pytest -q` — линтер и тесты (384 passed, 2 skipped).
+- `uv run ruff check src tests scripts && uv run pytest -q` — линтер и тесты (400 passed, 2 skipped).
 - `uv run pytest tests/test_scoring.py -q` — один файл.
 - `uv run callscope analyze examples/calls` — отчёт в `reports/<дата_время>/`; ~31 с первый раз, 0 с из кэша.
 - `uv run python scripts/generate_examples.py --out <dir>` — 5 m4a за ~34 с (`say`, голос Milena, только macOS).
 - `CALLSCOPE_SLOW=1 uv run pytest tests/test_asr.py -q` — медленный тест с реальной моделью.
+- Смысловая проверка: `ollama serve` (Ollama стоит через brew), модели `qwen2.5:7b` и `qwen2.5:3b` скачаны; `uv run callscope analyze examples/calls --semantic`. В тестах Ollama подменяется.
 
 Веб-панель (этап 2):
 

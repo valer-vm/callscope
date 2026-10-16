@@ -1,4 +1,4 @@
-"""«Настройки»: редактор чек-листа, переоценка, шаблон имени файла."""
+"""«Настройки»: редактор чек-листа, переоценка, шаблон имени файла, смысловая проверка."""
 
 from __future__ import annotations
 
@@ -7,8 +7,10 @@ from fastapi.testclient import TestClient
 
 from callscope.checklist import ChecklistItem, load_checklist
 from callscope.config import load_config
+from callscope.semantic import OllamaStatus
 from callscope.storage import Storage
 from callscope.web import create_app
+from callscope.web.routes import settings as settings_routes
 from callscope.web.routes.settings import ITEM_FIELDS, item_view, synonyms_to_text
 from callscope.worker import Worker
 
@@ -305,3 +307,59 @@ def test_filename_save_rejects_empty_template(authed, storage):
     response = authed.post("/settings/filename", data=data)
     assert response.status_code == 400 and "Введите шаблон" in response.text
     assert storage.config_path.read_bytes() == before
+
+
+# --- смысловая проверка --------------------------------------------------------------
+
+
+@pytest.fixture
+def ollama(monkeypatch):
+    """Состояние Ollama для страницы: по умолчанию работает, скачана qwen2.5:3b."""
+    state = {"status": OllamaStatus(True, ("qwen2.5:3b",))}
+    monkeypatch.setattr(settings_routes, "ollama_status", lambda url: state["status"])
+    return state
+
+
+def test_semantic_page_needs_login(client):
+    assert client.get("/settings/semantic").status_code == 303
+
+
+def test_semantic_page_shows_status_and_missing_model(authed, ollama):
+    page = authed.get("/settings/semantic")
+    assert page.status_code == 200
+    assert "Скачанные модели: qwen2.5:3b" in page.text
+    # по умолчанию выбрана qwen2.5:7b — её нет среди скачанных
+    assert "ollama pull qwen2.5:7b" in page.text
+    assert 'name="enabled" value="1">' in page.text  # выключено
+
+
+def test_semantic_page_when_ollama_is_down(authed, ollama):
+    ollama["status"] = OllamaStatus(False, error="Connection refused")
+    page = authed.get("/settings/semantic")
+    assert "Ollama не отвечает" in page.text and "Connection refused" in page.text
+
+
+def test_semantic_save_enables_and_changes_model(authed, storage, ollama):
+    response = authed.post("/settings/semantic", data={"enabled": "1", "model": "qwen2.5:3b"})
+    assert response.status_code == 303
+    assert response.headers["location"] == "/settings/semantic?saved=1"
+    semantic = load_config(storage.config_path).semantic
+    assert semantic.enabled is True and semantic.model == "qwen2.5:3b"
+    page = authed.get(response.headers["location"])
+    assert "Новые звонки будут проверяться моделью" in page.text
+    assert "не скачана" not in page.text
+
+    authed.post("/settings/semantic", data={"model": "qwen2.5:3b"})
+    assert load_config(storage.config_path).semantic.enabled is False
+
+
+def test_semantic_save_rejects_empty_model(authed, storage, ollama):
+    before = storage.config_path.read_bytes()
+    response = authed.post("/settings/semantic", data={"enabled": "1", "model": " "})
+    assert response.status_code == 400 and "Укажите модель" in response.text
+    assert storage.config_path.read_bytes() == before
+
+
+def test_settings_tabs_link_to_semantic(authed, ollama):
+    for url in ("/settings/checklist", "/settings/filename", "/settings/semantic"):
+        assert 'href="/settings/semantic"' in authed.get(url).text

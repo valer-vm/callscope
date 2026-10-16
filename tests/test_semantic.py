@@ -11,7 +11,7 @@ import pytest
 from callscope.checklist import load_checklist
 from callscope.config import DEFAULTS_DIR, SemanticConfig, Thresholds, load_config
 from callscope.model import CallScore, Dialogue, ItemResult
-from callscope.semantic import recheck
+from callscope.semantic import ollama_status, recheck
 
 THRESHOLDS = Thresholds()
 
@@ -135,11 +135,15 @@ def test_model_verdict_with_real_quote_is_accepted_and_score_recomputed(
     assert all(url.startswith("http://localhost:11434/") for url, _ in fake.requests)
 
 
-def test_only_failed_items_are_sent(checklist, config, monkeypatch):
+def test_failed_and_untriggered_items_are_sent(checklist, config, monkeypatch):
     fake = FakeOllama({})
     _patch_open(monkeypatch, fake)
     new, _ = recheck(DIALOGUE, checklist, SCORE, config, THRESHOLDS)
-    assert len(fake.requests) == 2
+    prompts = [body["prompt"] for _, body in fake.requests]
+    # need и next_step провалены; objection «не применим», но у него есть условие
+    assert len(prompts) == 3
+    assert sum("Отработка возражения" in p for p in prompts) == 1
+    assert not any("Приветствие" in p for p in prompts)
     assert new == SCORE
 
 
@@ -240,5 +244,142 @@ def test_request_goes_direct_even_with_proxy_configured(checklist, config, monke
         server.shutdown()
         server.server_close()
     assert warnings == []
-    assert received == ["/api/generate", "/api/generate"]
+    assert received == ["/api/generate"] * 3
     assert new == SCORE
+
+
+# --- условие, не пойманное фразами: возражение другими словами -------------------------
+
+OBJECTION_DIALOGUE = Dialogue.from_json(
+    {
+        "approximate": False,
+        "manager_channel": "left",
+        "role_source": "intro",
+        "utterances": [
+            {"start": 0.0, "end": 3.0, "role": "manager", "text": "Здравствуйте, Анна, СтройДом."},
+            {"start": 3.5, "end": 6.0, "role": "client", "text": "Мне нужен ламинат на кухню."},
+            {
+                "start": 6.5,
+                "end": 9.0,
+                "role": "manager",
+                "text": "Есть хороший влагостойкий, тысяча двести за метр.",
+            },
+            {
+                "start": 9.5,
+                "end": 12.0,
+                "role": "client",
+                "text": "В соседней фирме мне на треть меньше насчитали.",
+            },
+            {
+                "start": 12.5,
+                "end": 15.0,
+                "role": "manager",
+                "text": "У нас укладка уже входит в цену, отсюда и разница.",
+            },
+            {"start": 15.5, "end": 17.0, "role": "manager", "text": "Всего доброго, до свидания!"},
+        ],
+    }
+)
+
+TRIGGER_PROMPT_MARK = "Таких слов дословно нет"
+
+
+def _objection_answer(**fields):
+    answer = {"triggered": True, "trigger_quote": "", "passed": False, "quote": "", "reason": ""}
+    answer.update(fields)
+    return FakeOllama({TRIGGER_PROMPT_MARK: answer})
+
+
+def test_untriggered_objection_found_and_answered_passes(checklist, config, monkeypatch):
+    fake = _objection_answer(
+        trigger_quote="на треть меньше насчитали",
+        passed=True,
+        quote="укладка уже входит в цену",
+        reason="сравнение с конкурентом, ответ про укладку",
+    )
+    _patch_open(monkeypatch, fake)
+    new, warnings = recheck(OBJECTION_DIALOGUE, checklist, SCORE, config, THRESHOLDS)
+    objection = _by_id(new, "objection")
+    assert objection.status == "passed" and objection.by_model is True
+    assert [e.utterance_index for e in objection.evidence] == [3, 4]
+    assert "соседней фирме" in objection.reason
+    # 5 + 15 + 30 + 5 из 100 применимых
+    assert new.score == pytest.approx(55.0)
+    assert warnings == []
+
+
+def test_untriggered_objection_without_answer_fails(checklist, config, monkeypatch):
+    fake = _objection_answer(trigger_quote="в соседней фирме мне на треть меньше насчитали")
+    _patch_open(monkeypatch, fake)
+    new, _ = recheck(OBJECTION_DIALOGUE, checklist, SCORE, config, THRESHOLDS)
+    objection = _by_id(new, "objection")
+    assert objection.status == "failed" and objection.by_model is True
+    assert [e.utterance_index for e in objection.evidence] == [3]
+    assert new.score == pytest.approx(25.0)
+
+
+def test_answer_quoted_before_objection_does_not_count(checklist, config, monkeypatch):
+    fake = _objection_answer(
+        trigger_quote="на треть меньше насчитали", passed=True, quote="хороший влагостойкий"
+    )
+    _patch_open(monkeypatch, fake)
+    new, _ = recheck(OBJECTION_DIALOGUE, checklist, SCORE, config, THRESHOLDS)
+    assert _by_id(new, "objection").status == "failed"
+
+
+@pytest.mark.parametrize(
+    "trigger_quote",
+    [
+        "мне это дорого",  # такой реплики нет
+        "укладка уже входит в цену",  # реплика менеджера, а не клиента
+        "",
+    ],
+)
+def test_objection_without_real_client_quote_stays_not_applicable(
+    checklist, config, monkeypatch, trigger_quote
+):
+    fake = _objection_answer(trigger_quote=trigger_quote, passed=True, quote="входит в цену")
+    _patch_open(monkeypatch, fake)
+    new, _ = recheck(OBJECTION_DIALOGUE, checklist, SCORE, config, THRESHOLDS)
+    assert _by_id(new, "objection").status == "na"
+    assert new.score == SCORE.score
+
+
+def test_model_says_no_objection_keeps_not_applicable(checklist, config, monkeypatch):
+    fake = _objection_answer(triggered=False, trigger_quote="на треть меньше насчитали")
+    _patch_open(monkeypatch, fake)
+    new, _ = recheck(OBJECTION_DIALOGUE, checklist, SCORE, config, THRESHOLDS)
+    assert _by_id(new, "objection").status == "na"
+
+
+# --- состояние Ollama для страницы настроек ------------------------------------------
+
+
+def test_ollama_status_lists_models(monkeypatch):
+    seen = []
+
+    def tags(request, timeout=None):
+        seen.append(request.full_url)
+        body = {"models": [{"name": "qwen2.5:7b"}, {"name": "qwen2.5:3b"}, {"size": 1}]}
+        return io.BytesIO(json.dumps(body).encode("utf-8"))
+
+    _patch_open(monkeypatch, tags)
+    status = ollama_status("http://localhost:11434/")
+    assert status.reachable and status.models == ("qwen2.5:3b", "qwen2.5:7b")
+    assert seen == ["http://localhost:11434/api/tags"]
+
+
+def test_ollama_status_when_refused(monkeypatch):
+    def refuse(request, timeout=None):
+        raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+
+    _patch_open(monkeypatch, refuse)
+    status = ollama_status("http://localhost:11434")
+    assert not status.reachable and "refused" in status.error
+
+
+def test_ollama_status_never_asks_remote_address(monkeypatch):
+    fake = FakeOllama({})
+    _patch_open(monkeypatch, fake)
+    assert not ollama_status("http://example.com:11434").reachable
+    assert fake.requests == []

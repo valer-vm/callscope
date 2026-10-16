@@ -1,4 +1,4 @@
-"""«Настройки» — редактор чек-листа, переоценка, шаблон имени файла."""
+"""«Настройки» — редактор чек-листа, переоценка, шаблон имени файла, смысловая проверка."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from callscope.config import AppConfig, save_config
 from callscope.errors import CallScopeError, ConfigError
 from callscope.filenames import parse_filename
 from callscope.rescoring import reapply_template
+from callscope.semantic import ollama_status
 from callscope.storage import Storage
 from callscope.web.deps import (
     WorkingSettings,
@@ -550,3 +551,80 @@ async def filename_save(
     return RedirectResponse(
         f"/settings/filename?updated={updated}&unmatched={unmatched}", status_code=303
     )
+
+
+# --- смысловая проверка --------------------------------------------------------------
+
+# Подсказки к моделям, которые проверены на чек-листе по умолчанию.
+SEMANTIC_MODELS = (
+    ("qwen2.5:7b", "точнее, 4,7 ГБ, около 10 секунд на пункт"),
+    ("qwen2.5:3b", "быстрее, 1,9 ГБ, чаще пропускает выполненное"),
+)
+
+
+def _semantic_context(
+    config: AppConfig,
+    values: dict[str, Any],
+    worker: Worker | None,
+    *,
+    errors: dict[str, str] | None = None,
+    saved: bool = False,
+) -> dict[str, Any]:
+    status = ollama_status(config.semantic.url)
+    return {
+        "page_title": "Настройки — смысловая проверка",
+        "tab": "semantic",
+        "values": values,
+        "errors": errors or {},
+        "saved": saved,
+        "url": config.semantic.url,
+        "status": status,
+        "model_installed": values["model"] in status.models,
+        "known_models": SEMANTIC_MODELS,
+        "rescore": rescore_payload(worker.rescore_status if worker else None),
+    }
+
+
+@router.get("/settings/semantic", response_class=HTMLResponse)
+def semantic_page(
+    request: Request,
+    config: Annotated[AppConfig, Depends(get_config)],
+    worker: Annotated[Worker | None, Depends(get_worker)],
+    saved: int = 0,
+) -> Response:
+    values = {"enabled": config.semantic.enabled, "model": config.semantic.model}
+    return render(
+        request,
+        "settings_semantic.html",
+        _semantic_context(config, values, worker, saved=bool(saved)),
+        active="settings",
+    )
+
+
+@router.post("/settings/semantic", response_class=HTMLResponse)
+async def semantic_save(
+    request: Request,
+    config: Annotated[AppConfig, Depends(get_config)],
+    storage: Annotated[Storage, Depends(get_storage)],
+    worker: Annotated[Worker | None, Depends(get_worker)],
+) -> Response:
+    form = await request.form()
+    values = {"enabled": form.get("enabled") == "1", "model": str(form.get("model", "")).strip()}
+    errors: dict[str, str] = {}
+    if not values["model"]:
+        errors["model"] = "Укажите модель, например qwen2.5:7b."
+    if not errors:
+        semantic = replace(config.semantic, enabled=values["enabled"], model=values["model"])
+        try:
+            save_config(replace(config, semantic=semantic), storage.config_path)
+        except CallScopeError as exc:
+            errors["_"] = exc.message_ru
+    if errors:
+        return render(
+            request,
+            "settings_semantic.html",
+            _semantic_context(config, values, worker, errors=errors),
+            active="settings",
+            status_code=400,
+        )
+    return RedirectResponse("/settings/semantic?saved=1", status_code=303)
