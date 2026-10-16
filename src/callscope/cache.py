@@ -13,7 +13,7 @@ from callscope.errors import AudioError
 from callscope.model import RawTranscript
 
 # Меняется, когда меняется способ расшифровки или формат записи кэша.
-_FORMAT_VERSION = "1"
+_FORMAT_VERSION = "2"  # 2 — моно делится по голосу
 _CHUNK = 1 << 20
 
 

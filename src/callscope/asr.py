@@ -1,8 +1,9 @@
 """Локальная расшифровка записей faster-whisper.
 
 Стерео: каждый канал расшифровывается отдельно, сегменты сливаются по времени.
-Совпадающие каналы или молчащий канал — запасной моно-путь: смена стороны на паузе
-не короче порога или после вопроса. Записи никуда не отправляются; из сети один раз
+Совпадающие каналы или молчащий канал — запасной моно-путь: стороны различаются по голосу
+(`callscope.diarize`), а если по голосу не вышло — смена стороны на паузе не короче порога
+или после вопроса. Записи никуда не отправляются; из сети один раз
 скачивается только модель (если не задан локальный `model_path`).
 """
 
@@ -15,6 +16,7 @@ from typing import Any, Literal
 
 import numpy as np
 
+from callscope import diarize
 from callscope.errors import AudioError, CallScopeError
 from callscope.model import Channel, RawTranscript, Segment
 
@@ -182,7 +184,8 @@ class Transcriber:
     def _mono(
         self, signal: np.ndarray, duration: float, gap: float, report: Progress
     ) -> list[Segment]:
-        return split_mono_turns(self._words(signal, duration, report, 0, total=1), gap)
+        words = self._words(signal, duration, report, 0, total=1)
+        return split_mono_turns(words, gap, signal)
 
 
 def _decode_stereo(path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -240,11 +243,26 @@ def _segment(run: list[_Word], channel: Channel) -> Segment:
     return Segment(run[0][0], run[-1][1], text, channel)
 
 
-def split_mono_turns(words: Iterable[_Word], gap: float) -> list[Segment]:
-    """Делит слова моно-записи на реплики: смена стороны на паузе ≥ gap или после «?».
+def split_mono_turns(
+    words: Iterable[_Word], gap: float, signal: np.ndarray | None = None
+) -> list[Segment]:
+    """Делит слова моно-записи на реплики. Первый говорящий — условно «left».
 
-    Первый говорящий — условно «left».
+    С сигналом — по голосу (`diarize`); без сигнала или если голоса не разделились —
+    смена стороны на паузе ≥ gap или после «?».
     """
     sides: tuple[Channel, Channel] = ("left", "right")
+    words = list(words)
+    if signal is not None:
+        units = diarize.split_units(words)
+        speakers = diarize.assign_speakers(signal, units)
+        if speakers is not None:
+            turns: list[tuple[int, list[_Word]]] = []
+            for speaker, unit in zip(speakers, units, strict=True):
+                if turns and turns[-1][0] == speaker:
+                    turns[-1][1].extend(unit)
+                else:
+                    turns.append((speaker, list(unit)))
+            return [_segment(run, sides[speaker]) for speaker, run in turns]
     runs = _runs(words, gap, split_on_question=True)
     return [_segment(run, sides[i % 2]) for i, run in enumerate(runs)]
