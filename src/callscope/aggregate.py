@@ -52,12 +52,15 @@ def _conclusion(
 ) -> str:
     if total == 0:
         return "Нет оценённых звонков — выводов сделать нельзя."
-    best = max(loss, key=lambda p: p[1], default=None)  # первый максимум — по порядку чек-листа
-    if best is None or best[1] == 0:
+    top = max((n for _, n in loss), default=0)
+    if top == 0:
         return "Потерь не найдено: во всех звонках выполнены все применимые пункты чек-листа."
     titles = {i.id: i.title for i in checklist.items}
-    title = titles.get(best[0], best[0])
-    return f"Чаще всего звонки теряются на этапе «{title}» — {best[1]} из {total}."
+    leaders = [f"«{titles.get(item_id, item_id)}»" for item_id, n in loss if n == top]
+    if len(leaders) == 1:
+        return f"Чаще всего звонки теряются на этапе {leaders[0]} — {top} из {total}."
+    names = ", ".join(leaders[:-1]) + " и " + leaders[-1]
+    return f"Звонки теряются поровну на этапах {names} — по {top} из {total}."
 
 
 def build_summary(

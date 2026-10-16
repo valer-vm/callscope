@@ -93,6 +93,20 @@ def test_conclusion_names_stage_and_share():
     assert s.conclusion == "Чаще всего звонки теряются на этапе «Выявление потребности» — 2 из 5."
 
 
+def test_conclusion_names_all_tied_stages():
+    s = build([
+        make_call("a", 70, ("greeting",)),
+        make_call("b", 70, ("need",)),
+        make_call("c", 70, ("next_step",)),
+        make_call("d", 100, ()),
+        make_call("e", 100, ()),
+    ])
+    assert s.conclusion == (
+        "Звонки теряются поровну на этапах «Приветствие», «Выявление потребности» "
+        "и «Следующий шаг» — по 1 из 5."
+    )
+
+
 def test_conclusion_without_failures():
     s = build([make_call("ivanov", 100, ())])
     assert s.conclusion.startswith("Потерь не найдено")
