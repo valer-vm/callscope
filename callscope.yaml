@@ -1,0 +1,43 @@
+# Настройки CallScope. Файл ищется в текущей папке, иначе берутся встроенные значения.
+
+# Шаблон имени файла записи. Плейсхолдеры: {manager} (буквы, цифры, дефис),
+# {date}, {time}, {any} (любой текст). Пример: ivanov_2026-10-12_1530.mp3
+filename_template: "{manager}_{date}_{time}"
+date_format: "%Y-%m-%d"
+time_format: "%H%M"
+
+# Модель распознавания faster-whisper: tiny, base, small, medium, large-v3.
+model_size: small
+# Путь к уже скачанной модели (папка). null — скачать при первом запуске.
+model_path: null
+
+# Сторона менеджера в стерео-записи: auto, left, right.
+manager_channel: auto
+# Ручное указание стороны для отдельных файлов: имя файла → left/right.
+manager_channel_overrides: {}
+
+# Фразы, по которым менеджер представляется от имени компании.
+intro_phrases:
+  - меня зовут
+  - вас беспокоит
+  - беспокоит
+  - компания
+  - это компания
+  - представитель
+company_names:
+  - СтройДом
+
+# Моно-запись: смена говорящего на паузе не короче этого значения (секунды).
+mono_turn_gap: 0.8
+
+# Пороги оценки звонка: от good — хороший, от medium — средний, ниже — плохой.
+thresholds:
+  good: 80
+  medium: 50
+
+# Смысловая перепроверка проваленных пунктов локальной моделью Ollama.
+semantic:
+  enabled: false
+  url: "http://localhost:11434"
+  model: "qwen2.5:7b"
+  timeout: 120

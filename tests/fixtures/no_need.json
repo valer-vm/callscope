@@ -1,0 +1,70 @@
+{
+  "approximate": false,
+  "manager_channel": "left",
+  "role_source": "intro",
+  "utterances": [
+    {
+      "index": 0,
+      "start": 0.0,
+      "end": 4.8,
+      "text": "Здравствуйте, компания СтройДом, меня зовут Олег.",
+      "role": "manager"
+    },
+    {
+      "index": 1,
+      "start": 5.4,
+      "end": 9.6,
+      "text": "Здравствуйте, я по поводу ремонта ванной.",
+      "role": "client"
+    },
+    {
+      "index": 2,
+      "start": 10.2,
+      "end": 12.8,
+      "text": "Вам плитка нужна?",
+      "role": "manager"
+    },
+    {
+      "index": 3,
+      "start": 13.4,
+      "end": 15.8,
+      "text": "Ну, наверное.",
+      "role": "client"
+    },
+    {
+      "index": 4,
+      "start": 16.4,
+      "end": 22.6,
+      "text": "У нас сейчас есть итальянская плитка, предлагаю её, она самая красивая.",
+      "role": "manager"
+    },
+    {
+      "index": 5,
+      "start": 23.2,
+      "end": 28.0,
+      "text": "Мне вообще-то не плитка нужна была, а сантехника.",
+      "role": "client"
+    },
+    {
+      "index": 6,
+      "start": 28.6,
+      "end": 32.6,
+      "text": "Плитка тоже пригодится. Будете брать?",
+      "role": "manager"
+    },
+    {
+      "index": 7,
+      "start": 33.2,
+      "end": 36.2,
+      "text": "Нет, спасибо, не нужно.",
+      "role": "client"
+    },
+    {
+      "index": 8,
+      "start": 36.8,
+      "end": 39.6,
+      "text": "Ладно. До свидания.",
+      "role": "manager"
+    }
+  ]
+}
