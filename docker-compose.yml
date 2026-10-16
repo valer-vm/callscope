@@ -2,6 +2,12 @@
 #   docker compose up -d
 # Панель — http://<адрес сервера>:8000. Данные и модель распознавания — в именованных томах:
 # модель (~500 МБ) скачивается один раз при первой обработке записи.
+#
+# Смысловая проверка (необязательно): запустить вместе с Ollama —
+#   docker compose --profile semantic up -d
+# Ollama доступна только панели (порт наружу не открыт); модель qwen2.5:7b (~4,7 ГБ)
+# скачивается один раз в том ollama-models. Другая модель — CALLSCOPE_OLLAMA_MODEL в .env.
+# Затем в панели: «Настройки» → «Смысловая проверка» → включить.
 services:
   callscope:
     build: .
@@ -14,12 +20,40 @@ services:
       CALLSCOPE_PORT: "8000"
       CALLSCOPE_DATA_DIR: /data
       HF_HOME: /hf-cache
+      # Ollama — соседний контейнер (профиль semantic); без него проверка просто пропускается.
+      CALLSCOPE_OLLAMA_URL: http://ollama:11434
     ports:
       - "8000:8000"
     volumes:
       - callscope-data:/data
       - hf-cache:/hf-cache
 
+  ollama:
+    image: ollama/ollama:0.40.5
+    profiles: [semantic]
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # Разовое скачивание модели в том ollama-models; при повторном запуске — уже скачана.
+  ollama-pull:
+    image: ollama/ollama:0.40.5
+    profiles: [semantic]
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull"]
+    command: ["${CALLSCOPE_OLLAMA_MODEL:-qwen2.5:7b}"]
+
 volumes:
   callscope-data:
   hf-cache:
+  ollama-models:

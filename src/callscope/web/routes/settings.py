@@ -15,7 +15,7 @@ from callscope.config import AppConfig, save_config
 from callscope.errors import CallScopeError, ConfigError
 from callscope.filenames import parse_filename
 from callscope.rescoring import reapply_template
-from callscope.semantic import ollama_status
+from callscope.semantic import OLLAMA_URL_ENV, ollama_status, ollama_url
 from callscope.storage import Storage
 from callscope.web.deps import (
     WorkingSettings,
@@ -570,14 +570,17 @@ def _semantic_context(
     errors: dict[str, str] | None = None,
     saved: bool = False,
 ) -> dict[str, Any]:
-    status = ollama_status(config.semantic.url)
+    url = ollama_url(config)
+    status = ollama_status(url)
     return {
         "page_title": "Настройки — смысловая проверка",
         "tab": "semantic",
         "values": values,
         "errors": errors or {},
         "saved": saved,
-        "url": config.semantic.url,
+        "url": url,
+        "url_from_env": url != config.semantic.url,
+        "url_env": OLLAMA_URL_ENV,
         "status": status,
         "model_installed": values["model"] in status.models,
         "known_models": SEMANTIC_MODELS,

@@ -6,7 +6,7 @@
 В рабочей папке (в пути есть «:») сначала: `export UV_PROJECT_ENVIRONMENT=$HOME/.cache/callscope-venv`; в пути без «:» не нужно.
 
 - `uv sync` — зависимости.
-- `uv run ruff check src tests scripts && uv run pytest -q` — линтер и тесты (400 passed, 2 skipped).
+- `uv run ruff check src tests scripts && uv run pytest -q` — линтер и тесты (404 passed, 2 skipped).
 - `uv run pytest tests/test_scoring.py -q` — один файл.
 - `uv run callscope analyze examples/calls` — отчёт в `reports/<дата_время>/`; ~31 с первый раз, 0 с из кэша.
 - `uv run python scripts/generate_examples.py --out <dir>` — 5 m4a за ~34 с (`say`, голос Milena, только macOS).
@@ -20,7 +20,7 @@
 - `uv run callscope import <папка>` — загрузить записи из папки в базу панели (`--data-dir` — другая папка данных).
 - `uv run pytest tests/web -q` — тесты веба; `CALLSCOPE_SLOW=1 uv run pytest tests/test_e2e_upload.py -q` — сквозной тест на 20 записях с моделью.
 - `uv run python scripts/screenshots.py` — пересобрать скриншоты README (`docs/screenshots/`) из демо.
-- Docker: `colima start`, `docker-compose up -d --build` (healthy; модель ~1 мин, один раз, том `hf-cache`), `docker-compose down`. Плагин `docker compose` на этой машине не виден — только бинарник `docker-compose`.
+- Docker: `colima start`, `docker-compose up -d --build` (healthy; модель ~1 мин, один раз, том `hf-cache`), `docker-compose down`. С Ollama — `docker-compose --profile semantic up -d` (контейнеры `ollama` и разовый `ollama-pull`, том `ollama-models`; для проверки хватит `CALLSCOPE_OLLAMA_MODEL=qwen2.5:0.5b` в `.env`); `down` тоже с `--profile semantic`. Плагин `docker compose` на этой машине не виден — только бинарник `docker-compose`.
 
 ## Где что лежит
 
@@ -76,6 +76,8 @@
   - `CALLSCOPE_HOST` / `CALLSCOPE_PORT` — по умолчанию 127.0.0.1 и 8000.
   - `CALLSCOPE_TRUSTED_PROXIES` — адреса обратного прокси, которому верить в X-Forwarded-For; пусто — заголовки прокси игнорируются.
   - `CALLSCOPE_COOKIE_SECURE` — `1`: cookie входа только по HTTPS.
+  - `CALLSCOPE_OLLAMA_URL` — адрес Ollama не на localhost (в Docker задан: `http://ollama:11434`); заменяет `semantic.url`, только этот адрес разрешён кроме localhost.
+  - `CALLSCOPE_OLLAMA_MODEL` — какую модель скачивает `ollama-pull` в Docker.
 - Docker (`docker-compose.yml`): данные — том `callscope-data` (`/data`), модель — том `hf-cache` (`HF_HOME`); адрес и порт внутри фиксированы.
 
 ## Как здесь работает Autopilot

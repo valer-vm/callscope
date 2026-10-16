@@ -221,6 +221,7 @@ def main() -> int:
             ("call.png", f"/calls/{call_id}", 1200),
             ("upload.png", "/upload", None),
             ("checklist.png", "/settings/checklist", None),
+            ("semantic.png", "/settings/semantic", 760),
         ]
         for name, path, height in pages:
             tools.open(f"{base}{path}")

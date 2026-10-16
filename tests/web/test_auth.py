@@ -177,7 +177,8 @@ def test_env_example_lists_all_names_without_values():
     settings = dict(line.split("=", 1) for line in lines if line and not line.startswith("#"))
     assert set(settings) == {"CALLSCOPE_PASSWORD", "CALLSCOPE_SECRET_KEY", "CALLSCOPE_DATA_DIR",
                              "CALLSCOPE_HOST", "CALLSCOPE_PORT", "CALLSCOPE_TRUSTED_PROXIES",
-                             "CALLSCOPE_COOKIE_SECURE"}
+                             "CALLSCOPE_COOKIE_SECURE", "CALLSCOPE_OLLAMA_MODEL",
+                             "CALLSCOPE_OLLAMA_URL"}
     assert all(value == "" for value in settings.values())
     assert ".env" in (root / ".gitignore").read_text(encoding="utf-8").splitlines()
 

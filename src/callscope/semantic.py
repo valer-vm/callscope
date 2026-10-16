@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.error
 import urllib.request
@@ -19,6 +20,10 @@ from callscope.checklist import Checklist, ChecklistItem
 from callscope.config import AppConfig, Thresholds, is_local_url
 from callscope.model import CallScore, Dialogue, Evidence, ItemResult, Utterance
 from callscope.scoring import summarize
+
+# Адрес Ollama, заданный администратором в окружении (Docker: соседний контейнер
+# http://ollama:11434). Заменяет `semantic.url` и разрешён, хотя это не localhost.
+OLLAMA_URL_ENV = "CALLSCOPE_OLLAMA_URL"
 
 _ROLE_NAMES = {"manager": "Менеджер", "client": "Клиент"}
 _OTHER_ROLE = {"manager": "client", "client": "manager"}
@@ -86,9 +91,22 @@ class OllamaStatus:
     error: str | None = None
 
 
+def ollama_url(config: AppConfig) -> str:
+    """Действующий адрес Ollama: из окружения (`CALLSCOPE_OLLAMA_URL`), иначе из конфига."""
+    return os.environ.get(OLLAMA_URL_ENV, "").strip() or config.semantic.url
+
+
+def url_allowed(url: str) -> bool:
+    """Можно ли слать туда расшифровки: этот компьютер или адрес, заданный в окружении."""
+    from_env = os.environ.get(OLLAMA_URL_ENV, "").strip()
+    if from_env and url == from_env:
+        return url.startswith(("http://", "https://"))
+    return is_local_url(url)
+
+
 def ollama_status(url: str, timeout: float = 3) -> OllamaStatus:
     """Работает ли Ollama по адресу и какие модели в ней скачаны."""
-    if not is_local_url(url):
+    if not url_allowed(url):
         return OllamaStatus(False, error="адрес не на этом компьютере")
     request = urllib.request.Request(url.rstrip("/") + "/api/tags", method="GET")
     try:
@@ -104,7 +122,7 @@ def ollama_status(url: str, timeout: float = 3) -> OllamaStatus:
     return OllamaStatus(True, tuple(sorted(n for n in names if isinstance(n, str))))
 
 
-def _ask(config: AppConfig, prompt: str) -> Any:
+def _ask(config: AppConfig, url: str, prompt: str) -> Any:
     """Один запрос к Ollama; возвращает разобранный JSON-ответ модели или None."""
     semantic = config.semantic
     body = json.dumps(
@@ -118,7 +136,7 @@ def _ask(config: AppConfig, prompt: str) -> Any:
         ensure_ascii=False,
     ).encode("utf-8")
     request = urllib.request.Request(
-        semantic.url.rstrip("/") + "/api/generate",
+        url.rstrip("/") + "/api/generate",
         data=body,
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -163,8 +181,8 @@ def recheck(
 
     Включённость (`semantic.enabled`) решает вызывающий.
     """
-    url = config.semantic.url
-    if not is_local_url(url):
+    url = ollama_url(config)
+    if not url_allowed(url):
         return score, [
             f"Смысловая проверка пропущена: адрес Ollama {url} не локальный "
             "(допустимы только localhost и 127.0.0.1) — записи не отправляются наружу."
@@ -201,7 +219,7 @@ def recheck(
                 transcript=transcript,
             )
         try:
-            answer = _ask(config, prompt)
+            answer = _ask(config, url, prompt)
         except _OllamaUnavailable as exc:
             return score, [
                 f"Ollama недоступен по адресу {url} ({exc}) — смысловая проверка пропущена, "

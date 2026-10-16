@@ -11,7 +11,7 @@ import pytest
 from callscope.checklist import load_checklist
 from callscope.config import DEFAULTS_DIR, SemanticConfig, Thresholds, load_config
 from callscope.model import CallScore, Dialogue, ItemResult
-from callscope.semantic import ollama_status, recheck
+from callscope.semantic import OLLAMA_URL_ENV, ollama_status, ollama_url, recheck
 
 THRESHOLDS = Thresholds()
 
@@ -383,3 +383,39 @@ def test_ollama_status_never_asks_remote_address(monkeypatch):
     _patch_open(monkeypatch, fake)
     assert not ollama_status("http://example.com:11434").reachable
     assert fake.requests == []
+
+
+# --- адрес из окружения (Docker: соседний контейнер) ---------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _no_env_url(monkeypatch):
+    monkeypatch.delenv(OLLAMA_URL_ENV, raising=False)
+
+
+def test_env_url_replaces_config_and_is_allowed(checklist, config, monkeypatch):
+    monkeypatch.setenv(OLLAMA_URL_ENV, "http://ollama:11434")
+    fake = FakeOllama({})
+    _patch_open(monkeypatch, fake)
+    assert ollama_url(config) == "http://ollama:11434"
+    _, warnings = recheck(DIALOGUE, checklist, SCORE, config, THRESHOLDS)
+    assert warnings == []
+    assert fake.requests and all(
+        url == "http://ollama:11434/api/generate" for url, _ in fake.requests
+    )
+
+
+def test_env_url_does_not_allow_other_remote_addresses(checklist, config, monkeypatch):
+    monkeypatch.setenv(OLLAMA_URL_ENV, "http://ollama:11434")
+    fake = FakeOllama({})
+    _patch_open(monkeypatch, fake)
+    assert not ollama_status("http://example.com:11434").reachable
+    assert fake.requests == []
+
+
+def test_env_url_must_be_http(checklist, config, monkeypatch):
+    monkeypatch.setenv(OLLAMA_URL_ENV, "file:///etc/passwd")
+    fake = FakeOllama({})
+    _patch_open(monkeypatch, fake)
+    new, warnings = recheck(DIALOGUE, checklist, SCORE, config, THRESHOLDS)
+    assert fake.requests == [] and new == SCORE and len(warnings) == 1

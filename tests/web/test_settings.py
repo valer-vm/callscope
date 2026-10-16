@@ -315,8 +315,14 @@ def test_filename_save_rejects_empty_template(authed, storage):
 @pytest.fixture
 def ollama(monkeypatch):
     """Состояние Ollama для страницы: по умолчанию работает, скачана qwen2.5:3b."""
-    state = {"status": OllamaStatus(True, ("qwen2.5:3b",))}
-    monkeypatch.setattr(settings_routes, "ollama_status", lambda url: state["status"])
+    state = {"status": OllamaStatus(True, ("qwen2.5:3b",)), "urls": []}
+
+    def status(url):
+        state["urls"].append(url)
+        return state["status"]
+
+    monkeypatch.delenv("CALLSCOPE_OLLAMA_URL", raising=False)
+    monkeypatch.setattr(settings_routes, "ollama_status", status)
     return state
 
 
@@ -363,3 +369,11 @@ def test_semantic_save_rejects_empty_model(authed, storage, ollama):
 def test_settings_tabs_link_to_semantic(authed, ollama):
     for url in ("/settings/checklist", "/settings/filename", "/settings/semantic"):
         assert 'href="/settings/semantic"' in authed.get(url).text
+
+
+def test_semantic_page_uses_address_from_environment(authed, ollama, monkeypatch):
+    monkeypatch.setenv("CALLSCOPE_OLLAMA_URL", "http://ollama:11434")
+    ollama["status"] = OllamaStatus(False, error="Connection refused")
+    page = authed.get("/settings/semantic")
+    assert ollama["urls"] == ["http://ollama:11434"]
+    assert "http://ollama:11434" in page.text and "Адрес задан в окружении" in page.text
