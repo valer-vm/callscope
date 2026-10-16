@@ -1,0 +1,28 @@
+# В образ попадают только pyproject.toml, uv.lock и src/ (см. Dockerfile);
+# остальное исключено, чтобы секреты и данные не ушли в контекст сборки.
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.autopilot
+brief*.md
+AGENTS.md
+CLAUDE.md
+.venv
+.pytest_cache
+.ruff_cache
+**/__pycache__
+**/.callscope-cache
+callscope-data
+callscope-data-*
+reports
+models
+tests
+docs
+examples
+scripts
+Dockerfile
+docker-compose.yml
+.dockerignore
+.DS_Store

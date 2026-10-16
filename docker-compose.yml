@@ -1,0 +1,25 @@
+# Веб-панель CallScope на офисном сервере: cp .env.example .env, впишите пароль, затем
+#   docker compose up -d
+# Панель — http://<адрес сервера>:8000. Данные и модель распознавания — в именованных томах:
+# модель (~500 МБ) скачивается один раз при первой обработке записи.
+services:
+  callscope:
+    build: .
+    image: callscope:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Внутри контейнера адрес, порт и папки фиксированы; порт снаружи — в ports.
+      CALLSCOPE_HOST: 0.0.0.0
+      CALLSCOPE_PORT: "8000"
+      CALLSCOPE_DATA_DIR: /data
+      HF_HOME: /hf-cache
+    ports:
+      - "8000:8000"
+    volumes:
+      - callscope-data:/data
+      - hf-cache:/hf-cache
+
+volumes:
+  callscope-data:
+  hf-cache:
