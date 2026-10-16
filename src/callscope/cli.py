@@ -321,9 +321,10 @@ def demo(
     ] = False,
 ) -> None:
     """Создать демо-базу: 5 менеджеров и ~150 звонков за последние 8 недель."""
-    from callscope.demo import build_demo, clear_demo, demo_exists
-    from callscope.web.settings import resolve_data_dir
+    from callscope.demo import build_demo, clear_demo, demo_exists, is_demo_base
+    from callscope.web.settings import load_env, resolve_data_dir
 
+    load_env()  # CALLSCOPE_DATA_DIR из .env — чтобы узнать рабочую папку
     folder = resolve_data_dir(data_dir, demo=True)
     if demo_exists(folder):
         if not force:
@@ -334,6 +335,12 @@ def demo(
         if folder.resolve() == resolve_data_dir(None, demo=False).resolve():
             raise _fail(
                 f"{folder} — рабочая папка данных, её нельзя пересоздавать как демо. "
+                "Укажите другую папку в --data-dir.",
+                2,
+            )
+        if not is_demo_base(folder):
+            raise _fail(
+                f"В {folder} база создана не командой demo — её нельзя пересоздавать. "
                 "Укажите другую папку в --data-dir.",
                 2,
             )

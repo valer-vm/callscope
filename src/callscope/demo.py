@@ -19,6 +19,7 @@ import io
 import json
 import random
 import shutil
+import sqlite3
 import wave
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -678,13 +679,46 @@ _CORRECTIONS = (
 )
 
 
+DEMO_MARK_KEY = "demo_base"
+
+
 def demo_exists(data_dir: Path) -> bool:
     return (Path(data_dir) / DB_FILE_NAME).is_file()
 
 
+def is_demo_base(data_dir: Path) -> bool:
+    """База в папке создана `build_demo` (метка в таблице meta). Нет базы или метки — False."""
+    db_path = Path(data_dir) / DB_FILE_NAME
+    if not db_path.is_file():
+        return False
+    try:
+        db = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            row = db.execute("SELECT value FROM meta WHERE key = ?", (DEMO_MARK_KEY,)).fetchone()
+        finally:
+            db.close()
+    except sqlite3.Error:
+        return False
+    return row is not None and row[0] == "1"
+
+
+def _mark_demo(db_path: Path) -> None:
+    db = sqlite3.connect(db_path, timeout=30)
+    try:
+        with db:
+            db.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, '1')", (DEMO_MARK_KEY,)
+            )
+    finally:
+        db.close()
+
+
 def clear_demo(data_dir: Path) -> None:
-    """Удаляет только то, что создаёт `build_demo` (папка может быть общей)."""
+    """Удаляет только то, что создаёт `build_demo` (папка может быть общей).
+    База без демо-метки не трогается — ValueError."""
     folder = Path(data_dir)
+    if demo_exists(folder) and not is_demo_base(folder):
+        raise ValueError(f"{folder}: база создана не командой demo, удалять её нельзя.")
     for name in (DB_FILE_NAME, f"{DB_FILE_NAME}-wal", f"{DB_FILE_NAME}-shm", ".secret_key",
                  "checklist.yaml", "callscope.yaml"):
         (folder / name).unlink(missing_ok=True)
@@ -705,6 +739,7 @@ def build_demo(
     rng = random.Random(seed)
 
     storage = Storage(Path(data_dir))
+    _mark_demo(storage.db_path)
     config = load_config(storage.config_path)
     checklist = load_checklist(storage.checklist_path)
     normalizer = Normalizer()

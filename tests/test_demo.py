@@ -155,3 +155,26 @@ def test_demo_force_never_wipes_working_data_dir(tmp_path, monkeypatch):
     result = runner.invoke(app, ["demo", "--data-dir", "callscope-data", "--force"])
     assert result.exit_code == 2
     assert len(work.list_calls()) == 1
+
+
+def test_demo_force_respects_working_data_dir_from_env_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("CALLSCOPE_DATA_DIR", "placeholder")  # вернуть окружение после теста
+    monkeypatch.delenv("CALLSCOPE_DATA_DIR")
+    (tmp_path / ".env").write_text("CALLSCOPE_DATA_DIR=work-data\n", encoding="utf-8")
+    work = Storage(Path("work-data"))
+    work.add_upload("ivanov_2026-10-12_1530.mp3", b"abc")
+    result = runner.invoke(app, ["demo", "--data-dir", "work-data", "--force"])
+    assert result.exit_code == 2
+    assert len(work.list_calls()) == 1
+
+
+def test_demo_force_refuses_base_not_built_as_demo(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CALLSCOPE_DATA_DIR", raising=False)
+    other = Storage(tmp_path / "other")
+    other.add_upload("ivanov_2026-10-12_1530.mp3", b"abc")
+    result = runner.invoke(app, ["demo", "--data-dir", str(tmp_path / "other"), "--force"])
+    assert result.exit_code == 2
+    assert len(other.list_calls()) == 1
+    assert (tmp_path / "other" / "callscope.yaml").is_file()
