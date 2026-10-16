@@ -6,7 +6,7 @@
 В рабочей папке (в пути есть «:») сначала: `export UV_PROJECT_ENVIRONMENT=$HOME/.cache/callscope-venv`; в пути без «:» не нужно.
 
 - `uv sync` — зависимости.
-- `uv run ruff check src tests scripts && uv run pytest -q` — линтер и тесты (362 passed, 3 skipped).
+- `uv run ruff check src tests scripts && uv run pytest -q` — линтер и тесты (384 passed, 2 skipped).
 - `uv run pytest tests/test_scoring.py -q` — один файл.
 - `uv run callscope analyze examples/calls` — отчёт в `reports/<дата_время>/`; ~31 с первый раз, 0 с из кэша.
 - `uv run python scripts/generate_examples.py --out <dir>` — 5 m4a за ~34 с (`say`, голос Milena, только macOS).
@@ -73,6 +73,8 @@
   - `CALLSCOPE_SECRET_KEY` — ключ сессий; пусто — генерируется в `<папка данных>/.secret_key`.
   - `CALLSCOPE_DATA_DIR` — папка данных, по умолчанию `./callscope-data`.
   - `CALLSCOPE_HOST` / `CALLSCOPE_PORT` — по умолчанию 127.0.0.1 и 8000.
+  - `CALLSCOPE_TRUSTED_PROXIES` — адреса обратного прокси, которому верить в X-Forwarded-For; пусто — заголовки прокси игнорируются.
+  - `CALLSCOPE_COOKIE_SECURE` — `1`: cookie входа только по HTTPS.
 - Docker (`docker-compose.yml`): данные — том `callscope-data` (`/data`), модель — том `hf-cache` (`HF_HOME`); адрес и порт внутри фиксированы.
 
 ## Как здесь работает Autopilot
