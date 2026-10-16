@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block head %}
+<style>
+.filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 14px;background:var(--card);
+border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:16px 0 14px}
+.filters label{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted);font-weight:600}
+.filters select,.filters input{font:inherit;font-size:14px;font-weight:400;color:var(--ink);
+padding:6px 8px;border:1px solid #cbd5e1;border-radius:8px;background:var(--card);min-width:0}
+.filters input[type=number]{width:84px}
+.filters .dates{display:flex;gap:6px;align-items:flex-end}
+.filters .actions{display:flex;gap:8px;margin-left:auto}
+.listbar{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;
+margin:0 0 10px}
+.listbar .count{font-size:14px;color:var(--muted)}
+.mark{display:inline-block;font-size:12px;font-weight:600;border-radius:4px;padding:0 6px;
+margin:0 4px 2px 0;white-space:nowrap}
+.mark.manual{color:var(--accent);background:var(--accent-bg)}
+.mark.approx{color:var(--mid);background:var(--mid-bg)}
+td.date{white-space:nowrap}
+.pager{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:16px;font-size:14px}
+.pending{margin-top:14px}
+</style>
+{% endblock %}
+{% block content %}
+<h1>Звонки</h1>
+<p class="muted">Фильтры записаны в адрес страницы — ссылкой можно поделиться, а выгрузка в Excel берёт ровно то, что отобрано.</p>
+
+<form method="get" action="/calls" class="filters" aria-label="Фильтры звонков">
+  <label>Период
+    <select name="period">
+      {% for key, label in [("week", "Неделя"), ("4weeks", "4 недели"), ("quarter", "Квартал"), ("all", "Всё время"), ("custom", "Свои даты")] %}
+      <option value="{{ key }}"{% if form.period == key %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="dates">
+    <label>с <input type="date" name="start" value="{{ form.start.isoformat() if form.start else '' }}"></label>
+    <label>по <input type="date" name="end" value="{{ form.end.isoformat() if form.end else '' }}"></label>
+  </div>
+  <label>Менеджер
+    <select name="manager">
+      <option value="">Все</option>
+      {% for name in managers %}
+      <option value="{{ name }}"{% if form.manager == name %} selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Балл от <input type="number" name="score_min" min="0" max="100" step="any" value="{{ '%g' % form.score_min if form.score_min is not none else '' }}"></label>
+  <label>до <input type="number" name="score_max" min="0" max="100" step="any" value="{{ '%g' % form.score_max if form.score_max is not none else '' }}"></label>
+  <label>Провален пункт
+    <select name="failed_item">
+      <option value="">Любой</option>
+      {% for item in items %}
+      <option value="{{ item.id }}"{% if form.failed_item == item.id %} selected{% endif %}>{{ item.title }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="actions">
+    <button type="submit" class="button primary">Показать</button>
+    <a class="button" href="/calls">Сбросить</a>
+  </div>
+</form>
+
+<div class="listbar">
+  <span class="count">Период: <b>{{ period.label }}</b> · найдено звонков: <b>{{ total }}</b></span>
+  <a class="button" href="{{ export_url }}">Выгрузить в Excel</a>
+</div>
+
+{% if not rows %}
+<div class="empty">
+  {% if not managers %}
+  <b>Звонков пока нет</b>
+  <span class="muted">Загрузите записи на странице <a href="/upload">«Загрузка»</a> — после обработки они появятся здесь.</span>
+  {% elif has_filters %}
+  <b>По этим условиям звонков не найдено</b>
+  <span class="muted">Ослабьте фильтры или выберите другой период.</span>
+  {% else %}
+  <b>За этот период звонков нет</b>
+  <span class="muted">Выберите другой период или <a href="/upload">загрузите записи</a>.</span>
+  {% endif %}
+</div>
+{% else %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Дата</th><th>Менеджер</th><th>Запись</th><th>Балл</th><th>Где сорвался</th><th>Пометки</th></tr></thead>
+  <tbody>
+  {% for call in rows %}
+  <tr>
+    <td class="date">{{ (call.call_datetime or call.uploaded_at) | dt }}</td>
+    <td>{{ call.manager }}</td>
+    <td><a href="/calls/{{ call.id }}">{{ call.file_name }}</a></td>
+    <td><span class="score {{ call.score | grade(thresholds) }}">{{ call.score | score }}</span></td>
+    <td>{% if call.score.loss_item_id %}{{ titles.get(call.score.loss_item_id, call.score.loss_item_id) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td>
+      {% if call.corrections.values() | selectattr("status") | list %}<span class="mark manual">исправлено вручную</span>{% endif %}
+      {% if call.id in approximate %}<span class="mark approx">стороны приблизительно</span>{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if pages > 1 %}
+<nav class="pager" aria-label="Страницы">
+  {% if prev_url %}<a class="button small" href="{{ prev_url }}">← Назад</a>{% endif %}
+  <span>Страница {{ page }} из {{ pages }}</span>
+  {% if next_url %}<a class="button small" href="{{ next_url }}">Дальше →</a>{% endif %}
+</nav>
+{% endif %}
+{% endif %}
+
+{% if pending %}
+<p class="muted pending">Ещё не обработаны (очередь, обработка или ошибка): {{ pending }}. Их состояние — на странице <a href="/upload">«Загрузка»</a>; в таблице и в выгрузке они не участвуют.</p>
+{% endif %}
+{% endblock %}
