@@ -27,6 +27,37 @@ _NEGATIONS_BEFORE = frozenset({"не", "нет", "без", "ни"})
 _NEGATION_AFTER = "нет"
 _NEGATION_AFTER_WINDOW = 3
 _CLAUSE_BREAK = re.compile(r"[,;:—–()]")
+# Вводные слова между запятыми не отрывают «нет» от фразы: «Скидок, к сожалению, нет».
+_PARENTHETICALS = (
+    "к сожалению",
+    "увы",
+    "конечно",
+    "правда",
+    "честно говоря",
+    "честно",
+    "наверное",
+    "видимо",
+    "кстати",
+    "впрочем",
+    "собственно",
+    "в общем",
+    "в принципе",
+    "знаете",
+    "понимаете",
+    "извините",
+    "простите",
+    "к счастью",
+    "по-моему",
+    "вообще-то",
+    "думаю",
+)
+# Что может стоять перед «нет» после вводных слов, чтобы «нет» ещё относилось к фразе
+# («Скидок, к сожалению, у нас сейчас нет»). Новое существительное («…, переплат нет»)
+# сюда не входит — там «нет» про него.
+_NEGATION_FILLERS = frozenset(
+    "у мы я вы они он она оно сейчас пока уже здесь тут вообще совсем больше "
+    "сегодня теперь давно никакой".split()
+)
 # Фраза-триггер, за которой сразу идёт вопросительное слово, — уточнение, а не
 # возражение: «не уверен, какая площадь».
 _CLARIFYING_WORDS = frozenset(
@@ -67,6 +98,7 @@ class _ItemScorer:
         self.checklist = checklist
         self.norm = normalizer
         self.position = {u.index: pos for pos, u in enumerate(dialogue.utterances)}
+        self.parentheticals = {tuple(normalizer.lemmas(p)) for p in _PARENTHETICALS}
 
     # --- фразы и синонимы ---------------------------------------------------
 
@@ -105,8 +137,8 @@ class _ItemScorer:
             # «Есть рассрочка, переплат нет» — «нет» относится не к рассрочке.
             lemmas: list[str] = []
             clause_of: list[int] = []
-            for clause_no, clause in enumerate(_CLAUSE_BREAK.split(sentence)):
-                clause_lemmas = self.norm.lemmas(clause)
+            clauses = [self.norm.lemmas(c) for c in _CLAUSE_BREAK.split(sentence)]
+            for clause_no, clause_lemmas in enumerate(clauses):
                 lemmas.extend(clause_lemmas)
                 clause_of.extend([clause_no] * len(clause_lemmas))
             for phrase in phrases:
@@ -123,10 +155,27 @@ class _ItemScorer:
                     after = lemmas[end : min(end + _NEGATION_AFTER_WINDOW, clause_end)]
                     if _NEGATION_AFTER in after:
                         continue
+                    if (
+                        clause_end - end < _NEGATION_AFTER_WINDOW
+                        and self.negated_past_parenthetical(clauses, clause_of[end - 1])
+                    ):
+                        continue
                     if as_trigger and end < len(lemmas) and lemmas[end] in _CLARIFYING_WORDS:
                         continue
                     return True
         return False
+
+    def negated_past_parenthetical(self, clauses: list[list[str]], clause_no: int) -> bool:
+        """«нет» сразу за вводными словами, которые идут после части с фразой."""
+        rest = [c for c in clauses[clause_no + 1 :] if c]
+        skipped = 0
+        while rest and tuple(rest[0]) in self.parentheticals:
+            rest = rest[1:]
+            skipped += 1
+        if not skipped or not rest or _NEGATION_AFTER not in rest[0]:
+            return False
+        before = rest[0][: rest[0].index(_NEGATION_AFTER)]
+        return all(lemma in _NEGATION_FILLERS for lemma in before)
 
     # --- окна реплик --------------------------------------------------------
 

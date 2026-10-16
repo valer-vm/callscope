@@ -81,7 +81,10 @@ def _ask(config: AppConfig, prompt: str) -> Any:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=semantic.timeout) as response:
+        # Без прокси: urlopen берёт HTTP_PROXY из окружения даже для localhost,
+        # и записи ушли бы на чужой сервер.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=semantic.timeout) as response:
             raw = response.read()
     except urllib.error.HTTPError as exc:
         raise _OllamaUnavailable(f"ответ HTTP {exc.code}") from None

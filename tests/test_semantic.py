@@ -1,5 +1,7 @@
+import http.server
 import io
 import json
+import threading
 import urllib.error
 import urllib.request
 from dataclasses import replace
@@ -78,7 +80,7 @@ def config():
 
 
 class FakeOllama:
-    """Подменяет urllib.request.urlopen: отвечает по названию пункта в промпте."""
+    """Поддельная Ollama: отвечает по названию пункта в промпте."""
 
     def __init__(self, answers):
         self.answers = answers  # title-фрагмент → dict ответа модели
@@ -93,6 +95,15 @@ class FakeOllama:
                 answer = value
         payload = json.dumps({"response": json.dumps(answer, ensure_ascii=False)})
         return io.BytesIO(payload.encode("utf-8"))
+
+
+def _patch_open(monkeypatch, fake):
+    """Подменяет отправку запроса любым urllib-открывателем (urlopen и build_opener)."""
+    monkeypatch.setattr(
+        urllib.request.OpenerDirector,
+        "open",
+        lambda self, request, data=None, timeout=None: fake(request, timeout=timeout),
+    )
 
 
 def _by_id(score, item_id):
@@ -111,7 +122,7 @@ def test_model_verdict_with_real_quote_is_accepted_and_score_recomputed(
             }
         }
     )
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    _patch_open(monkeypatch, fake)
     new, warnings = recheck(DIALOGUE, checklist, SCORE, config, THRESHOLDS)
     need = _by_id(new, "need")
     assert need.status == "passed" and need.by_model is True
@@ -126,7 +137,7 @@ def test_model_verdict_with_real_quote_is_accepted_and_score_recomputed(
 
 def test_only_failed_items_are_sent(checklist, config, monkeypatch):
     fake = FakeOllama({})
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    _patch_open(monkeypatch, fake)
     new, _ = recheck(DIALOGUE, checklist, SCORE, config, THRESHOLDS)
     assert len(fake.requests) == 2
     assert new == SCORE
@@ -142,7 +153,7 @@ def test_quote_absent_from_transcript_is_rejected(checklist, config, monkeypatch
             }
         }
     )
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    _patch_open(monkeypatch, fake)
     new, _ = recheck(DIALOGUE, checklist, SCORE, config, THRESHOLDS)
     assert _by_id(new, "need").status == "failed"
     assert _by_id(new, "need").by_model is False
@@ -159,7 +170,7 @@ def test_quote_from_wrong_speaker_is_rejected(checklist, config, monkeypatch):
             }
         }
     )
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    _patch_open(monkeypatch, fake)
     new, _ = recheck(DIALOGUE, checklist, SCORE, config, THRESHOLDS)
     assert _by_id(new, "need").status == "failed"
 
@@ -168,7 +179,7 @@ def test_connection_refused_keeps_original_score_with_warning(checklist, config,
     def refuse(request, timeout=None):
         raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
 
-    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    _patch_open(monkeypatch, refuse)
     new, warnings = recheck(DIALOGUE, checklist, SCORE, config, THRESHOLDS)
     assert new == SCORE
     assert len(warnings) == 1 and "Ollama" in warnings[0]
@@ -176,7 +187,7 @@ def test_connection_refused_keeps_original_score_with_warning(checklist, config,
 
 def test_non_local_url_is_refused_without_request(checklist, config, monkeypatch):
     fake = FakeOllama({})
-    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    _patch_open(monkeypatch, fake)
     remote = replace(config, semantic=SemanticConfig(enabled=True, url="http://example.com:11434"))
     new, warnings = recheck(DIALOGUE, checklist, SCORE, remote, THRESHOLDS)
     assert fake.requests == []
@@ -188,7 +199,46 @@ def test_garbage_model_answer_keeps_item_failed(checklist, config, monkeypatch):
     def garbage(request, timeout=None):
         return io.BytesIO(json.dumps({"response": "это не json"}).encode("utf-8"))
 
-    monkeypatch.setattr(urllib.request, "urlopen", garbage)
+    _patch_open(monkeypatch, garbage)
     new, warnings = recheck(DIALOGUE, checklist, SCORE, config, THRESHOLDS)
     assert new == SCORE
     assert warnings
+
+
+def test_request_goes_direct_even_with_proxy_configured(checklist, config, monkeypatch):
+    """Записи не уходят через системный прокси: Ollama на localhost — только напрямую."""
+    received = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            received.append(self.path)
+            self.rfile.read(int(self.headers["Content-Length"]))
+            answer = {"passed": False, "quote": "", "reason": "не найдено"}
+            payload = json.dumps({"response": json.dumps(answer, ensure_ascii=False)})
+            data = payload.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        for name in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY"):
+            monkeypatch.setenv(name, "http://127.0.0.1:9")
+        for name in ("NO_PROXY", "no_proxy"):
+            monkeypatch.delenv(name, raising=False)
+        url = f"http://localhost:{server.server_address[1]}"
+        local = replace(config, semantic=SemanticConfig(enabled=True, url=url, timeout=5))
+        new, warnings = recheck(DIALOGUE, checklist, SCORE, local, THRESHOLDS)
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert warnings == []
+    assert received == ["/api/generate", "/api/generate"]
+    assert new == SCORE

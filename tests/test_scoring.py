@@ -418,3 +418,25 @@ def test_statement_without_reply_is_not_question(normalizer):
     )
     assert _need_status(normalizer, *lines) == "failed"
 
+
+@pytest.mark.parametrize("reply", ["Скидок, к сожалению, нет.", "Скидок, увы, нет."])
+def test_negation_after_parenthetical_words_cancels_handling(default_checklist, normalizer, reply):
+    status = objection_status(
+        default_checklist, normalizer, ("client", "Это дорого."), ("manager", reply)
+    )
+    assert status == "failed"
+
+
+def test_road_is_not_expensive(default_checklist, normalizer):
+    status = objection_status(
+        default_checklist,
+        normalizer,
+        ("client", "Дорога до объекта плохая."),
+        ("manager", "Понятно."),
+    )
+    assert status == "na"
+
+
+def test_rare_parse_does_not_match_other_word(normalizer):
+    assert not normalizer.contains_phrase("Дорога до объекта плохая", "дорого")
+    assert normalizer.contains_phrase("Это дорогое удовольствие", "дорого")
