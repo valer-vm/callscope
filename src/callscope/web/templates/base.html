@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ page_title or "Панель" }}{% endblock %} — CallScope</title>
+<link rel="stylesheet" href="/static/app.css">
+{% block head %}{% endblock %}
+</head>
+<body>
+{% block body %}
+<div class="shell">
+  <header class="topbar">
+    <button type="button" class="menu-toggle" aria-controls="sidebar" aria-expanded="false"
+            data-menu-toggle>☰ Меню</button>
+    <a href="/" class="brand">CallScope</a>
+    {% if demo %}<span class="demo-badge">Демо</span>{% endif %}
+  </header>
+  <nav class="sidebar" id="sidebar" aria-label="Разделы">
+    <div class="sidebar-head">
+      <a href="/" class="brand">CallScope</a>
+      {% if demo %}<span class="demo-badge" title="Открыта демо-база с вымышленными звонками">Демо</span>{% endif %}
+    </div>
+    {% set nav = [
+      ("overview", "/", "Обзор"),
+      ("managers", "/managers", "Менеджеры"),
+      ("calls", "/calls", "Звонки"),
+      ("upload", "/upload", "Загрузка"),
+      ("settings", "/settings/checklist", "Настройки"),
+    ] %}
+    <ul class="nav">
+      {% for key, href, label in nav %}
+      <li><a href="{{ href }}"{% if active == key %} class="active" aria-current="page"{% endif %}>{{ label }}</a></li>
+      {% endfor %}
+    </ul>
+    <form method="post" action="/logout" class="logout">
+      <button type="submit" class="link-button">Выйти</button>
+    </form>
+  </nav>
+  <div class="backdrop" data-menu-close></div>
+  <main class="content">
+    {% block content %}
+    <h1>{{ page_title }}</h1>
+    {% if error_message %}
+    <div class="alert bad">{{ error_message }}</div>
+    {% else %}
+    <div class="empty">
+      <b>Раздел появится скоро</b>
+      <span class="muted">Пока можно загрузить записи на странице <a href="/upload">«Загрузка»</a>.</span>
+    </div>
+    {% endif %}
+    {% endblock %}
+  </main>
+</div>
+{% endblock %}
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

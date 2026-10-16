@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Загрузка записей</h1>
+<p class="muted">Записи обрабатываются по одной в фоне на этом компьютере. Вкладку можно закрыть —
+  обработка продолжится.</p>
+
+<div class="dropzone" id="dropzone" tabindex="0" role="button"
+     aria-label="Перетащите записи сюда или выберите файлы">
+  <b>Перетащите записи сюда</b>
+  <span class="muted">или</span>
+  <label class="button primary">Выбрать файлы
+    <input type="file" id="file-input" multiple
+           accept=".mp3,.wav,.ogg,.m4a,audio/mpeg,audio/wav,audio/ogg,audio/mp4" hidden>
+  </label>
+  <span class="muted small">{{ extensions }} · до {{ max_mb }} МБ каждая · можно сразу десятки</span>
+</div>
+
+<section id="sending" class="sending" hidden>
+  <h2>Отправка</h2>
+  <ul class="send-list" id="send-list"></ul>
+</section>
+
+<section>
+  <h2>Очередь <span class="muted small" id="queue-counts"></span></h2>
+  <div class="table-wrap">
+    <table class="queue">
+      <thead><tr><th>Запись</th><th>Менеджер</th><th>Статус</th><th></th></tr></thead>
+      <tbody id="queue-body">
+        <tr><td colspan="4" class="muted">Загружаю список…</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="empty" id="queue-empty" hidden>
+    <b>Записей пока нет</b>
+    <span class="muted">Перетащите файлы в рамку выше — они появятся здесь.</span>
+  </p>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/upload.js"></script>{% endblock %}

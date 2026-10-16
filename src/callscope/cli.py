@@ -1,14 +1,16 @@
-"""Команда `callscope analyze`: папка записей → отчёты HTML и Excel."""
+"""Команды CallScope: `analyze` (папка записей → отчёты HTML и Excel), `serve` (веб-панель),
+`import` (папка записей → очередь панели)."""
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from dataclasses import replace
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
@@ -32,6 +34,9 @@ from callscope.pipeline import analyze_raw, transcript_for
 from callscope.report_html import write_html
 from callscope.report_xlsx import write_xlsx
 from callscope.textnorm import Normalizer
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 AUDIO_EXTENSIONS = (".mp3", ".wav", ".ogg", ".m4a")
 CACHE_DIR_NAME = ".callscope-cache"
@@ -238,3 +243,139 @@ def analyze(
     )
     console.print(summary.conclusion)
     typer.echo(f"Отчёт: {folder}")
+
+
+# --- веб-панель -----------------------------------------------------------------------
+
+
+def _run_server(app_: FastAPI, host: str, port: int) -> None:
+    import uvicorn
+
+    # proxy_headers=False: адрес клиента (для блокировки перебора паролей) не берётся
+    # из X-Forwarded-For — иначе его подделка с localhost обходит блокировку.
+    uvicorn.run(app_, host=host, port=port, log_level="info", proxy_headers=False)
+
+
+@app.command()
+def serve(
+    host: Annotated[
+        str | None, typer.Option("--host", help="Адрес (по умолчанию 127.0.0.1).")
+    ] = None,
+    port: Annotated[int | None, typer.Option("--port", help="Порт (по умолчанию 8000).")] = None,
+    data_dir: Annotated[
+        Path | None,
+        typer.Option("--data-dir", help="Папка данных панели (по умолчанию ./callscope-data)."),
+    ] = None,
+    demo: Annotated[
+        bool, typer.Option("--demo", help="Открыть демо-базу ./callscope-data-demo.")
+    ] = False,
+) -> None:
+    """Запустить веб-панель руководителя (пароль — CALLSCOPE_PASSWORD в .env)."""
+    from callscope.storage import DB_FILE_NAME, Storage
+    from callscope.web import create_app
+    from callscope.web.deps import WorkingSettings
+    from callscope.web.settings import (
+        load_env,
+        load_web_settings,
+        resolve_data_dir,
+        server_address,
+    )
+    from callscope.worker import Worker
+
+    load_env()
+    folder = resolve_data_dir(data_dir, demo)
+    if demo and not (folder / DB_FILE_NAME).is_file():
+        raise _fail(
+            f"Демо-база не найдена в {folder}. Создайте её командой: callscope demo", 2
+        )
+    try:
+        settings = load_web_settings(folder, demo)
+        bind_host, bind_port = server_address(host, port)
+    except ConfigError as exc:
+        raise _fail(exc.message_ru, 2) from None
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    storage = Storage(settings.data_dir)
+    working = WorkingSettings(storage)
+    worker = Worker(
+        storage,
+        lambda config: Transcriber(config.model_size, config.model_path),
+        working.load,
+    )
+    web_app = create_app(settings, worker)
+    shown_host = "127.0.0.1" if bind_host in ("0.0.0.0", "") else bind_host
+    mode = " (демо)" if demo else ""
+    console.print(f"Папка данных: {settings.data_dir.resolve()}{mode}")
+    typer.echo(f"Панель: http://{shown_host}:{bind_port}")
+    _run_server(web_app, bind_host, bind_port)
+
+
+@app.command("import")
+def import_folder(
+    path: Annotated[Path, typer.Argument(help="Папка с записями (mp3, wav, ogg, m4a).")],
+    data_dir: Annotated[
+        Path | None,
+        typer.Option("--data-dir", help="Папка данных панели (по умолчанию ./callscope-data)."),
+    ] = None,
+) -> None:
+    """Поставить записи папки в очередь панели; уже загруженные пропускаются."""
+    from callscope.storage import Storage
+    from callscope.web.settings import load_env, resolve_data_dir
+    from callscope.worker import CACHE_DIR_NAME as PANEL_CACHE_DIR
+
+    if not path.exists():
+        raise _fail(f"Папка {path} не найдена.", 2)
+    if not path.is_dir():
+        raise _fail(f"{path} — не папка. Укажите папку с записями.", 2)
+    recordings = find_recordings(path)
+    if not recordings:
+        raise _fail(f"В папке {path} нет записей (mp3, wav, ogg, m4a).", 1)
+
+    load_env()
+    storage = Storage(resolve_data_dir(data_dir, demo=False))
+    try:
+        config = load_config(storage.config_path)
+    except ConfigError as exc:
+        raise _fail(exc.message_ru, 2) from None
+    stage1_dir = path / CACHE_DIR_NAME
+    stage1 = TranscriptCache(stage1_dir) if stage1_dir.is_dir() else None
+    panel_cache = TranscriptCache(storage.data_dir / PANEL_CACHE_DIR)
+    model = config.model_path or config.model_size
+
+    queued = known = from_cache = 0
+    for audio in recordings:
+        try:
+            _record, is_new = storage.add_upload(audio.name, audio)
+        except OSError as exc:
+            console.print(f"[yellow]Пропущен {audio.name}: {exc.strerror}[/yellow]")
+            continue
+        if not is_new:
+            known += 1
+            continue
+        queued += 1
+        if stage1 is not None and _copy_cached(audio, stage1, panel_cache, model, config):
+            from_cache += 1
+
+    typer.echo(f"Записи из {path}: поставлено {queued}, уже были {known}.")
+    if stage1 is not None:
+        typer.echo(f"Готовых расшифровок взято из кэша: {from_cache} (папка {CACHE_DIR_NAME}).")
+    if queued:
+        typer.echo("Обработает запущенная панель (callscope serve) или следующий её запуск.")
+
+
+def _copy_cached(
+    audio: Path, source: TranscriptCache, target: TranscriptCache, model: str, config: AppConfig
+) -> bool:
+    """Расшифровка этапа 1 → кэш панели (ключ тот же: содержимое + модель + порог пауз)."""
+    try:
+        key = source.key(audio, model, config.mono_turn_gap)
+    except AudioError:
+        return False
+    raw = source.get(key)
+    if raw is None:
+        return False
+    try:
+        target.put(key, raw)
+    except OSError:
+        return False
+    return True
