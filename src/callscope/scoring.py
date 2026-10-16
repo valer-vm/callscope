@@ -264,7 +264,7 @@ class _ItemScorer:
             evidence=tuple(_evidence(u) for u in evidence[:_MAX_EVIDENCE]),
         )
 
-    def is_open_question(self, sentence: str, question_words: list[list[str]]) -> bool:
+    def is_open_question(self, sentence: str, question_words: tuple[str, ...]) -> bool:
         # Whisper часто ставит запятую вместо точки: «Понятно, какая площадь?» —
         # после первой части из одного слова («Понятно», «Конечно») смотрим и вторую.
         clauses = [c for c in _CLAUSE_BREAK.split(sentence) if self.norm.lemmas(c)]
@@ -273,13 +273,19 @@ class _ItemScorer:
             candidates.append(clauses[1])
         for clause in candidates:
             lemmas = self.norm.lemmas(clause)
-            while lemmas and lemmas[0] in _QUESTION_LEAD_INS:
-                lemmas = lemmas[1:]
-            if any(word and lemmas[: len(word)] == word for word in question_words):
+            start = 0
+            while start < len(lemmas) and lemmas[start] in _QUESTION_LEAD_INS:
+                start += 1
+            # Вопросительное слово сравнивается так же, как ключевые фразы (phrase_spans).
+            if any(
+                begin == start
+                for word in question_words
+                for begin, _end in self.norm.phrase_spans(clause, word)
+            ):
                 return True
         return False
 
-    def questions(self, utterance: Utterance, question_words: list[list[str]]) -> list[str]:
+    def questions(self, utterance: Utterance, question_words: tuple[str, ...]) -> list[str]:
         """Вопросы реплики. Последнее предложение без «?» тоже вопрос, если начинается
         с вопросительного слова и собеседник сразу ответил (whisper теряет «?»)."""
         sentences = [s.strip() for s in _SENTENCE.findall(utterance.text) if s.strip()]
@@ -301,7 +307,7 @@ class _ItemScorer:
         return result
 
     def score_open_questions(self, item: ChecklistItem) -> ItemResult:
-        question_words = [self.norm.lemmas(p) for p in self.expand(item.phrases, item)]
+        question_words = self.expand(item.phrases, item)
         window = self.window(item)
         open_found: list[Utterance] = []
         closed_found: list[Utterance] = []
@@ -400,11 +406,19 @@ def score_call(
     """Проверяет звонок по каждому пункту чек-листа и считает итоговый балл 0–100."""
     scorer = _ItemScorer(dialogue, checklist, normalizer or _default_normalizer())
     results = tuple(scorer.score(item) for item in checklist.items)
+    return summarize(results, checklist, thresholds)
+
+
+def summarize(
+    items: tuple[ItemResult, ...], checklist: Checklist, thresholds: Thresholds
+) -> CallScore:
+    """Итог по результатам пунктов: балл 0–100 (вес выполненных / вес применимых),
+    этап потери — первый проваленный пункт, оценка по порогам."""
     weights = {item.id: item.weight for item in checklist.items}
-    applicable = sum(weights[r.item_id] for r in results if r.status != "na")
-    passed = sum(weights[r.item_id] for r in results if r.status == "passed")
+    applicable = sum(weights.get(r.item_id, 0.0) for r in items if r.status != "na")
+    passed = sum(weights.get(r.item_id, 0.0) for r in items if r.status == "passed")
     score = round(passed / applicable * 100, 1) if applicable else 0.0
-    loss = next((r.item_id for r in results if r.status == "failed"), None)
+    loss = next((r.item_id for r in items if r.status == "failed"), None)
     return CallScore(
-        items=results, score=score, loss_item_id=loss, grade=grade_for(score, thresholds)
+        items=items, score=score, loss_item_id=loss, grade=grade_for(score, thresholds)
     )

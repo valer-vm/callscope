@@ -17,7 +17,7 @@ from typing import Any
 from callscope.checklist import Checklist, ChecklistItem
 from callscope.config import AppConfig, Thresholds, is_local_url
 from callscope.model import CallScore, Dialogue, Evidence, ItemResult, Utterance
-from callscope.scoring import grade_for
+from callscope.scoring import summarize
 
 _ROLE_NAMES = {"manager": "Менеджер", "client": "Клиент"}
 _NON_WORD = re.compile(r"[^0-9a-zа-я]+")
@@ -99,19 +99,6 @@ def _find_quote(quote: str, dialogue: Dialogue, item: ChecklistItem) -> Utteranc
     return None
 
 
-def _rescore(
-    items: tuple[ItemResult, ...], checklist: Checklist, thresholds: Thresholds
-) -> CallScore:
-    weights = {item.id: item.weight for item in checklist.items}
-    applicable = sum(weights.get(r.item_id, 0.0) for r in items if r.status != "na")
-    passed = sum(weights.get(r.item_id, 0.0) for r in items if r.status == "passed")
-    score = round(passed / applicable * 100, 1) if applicable else 0.0
-    loss = next((r.item_id for r in items if r.status == "failed"), None)
-    return CallScore(
-        items=items, score=score, loss_item_id=loss, grade=grade_for(score, thresholds)
-    )
-
-
 def recheck(
     dialogue: Dialogue,
     checklist: Checklist,
@@ -182,4 +169,4 @@ def recheck(
     if not updated:
         return score, warnings
     items = tuple(updated.get(r.item_id, r) for r in score.items)
-    return _rescore(items, checklist, thresholds), warnings
+    return summarize(items, checklist, thresholds), warnings
