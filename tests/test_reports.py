@@ -139,3 +139,23 @@ def test_reports_for_summary_without_calls(tmp_path):
     write_xlsx(s, tmp_path / "e.xlsx")
     assert "x.mp3" in (tmp_path / "e.html").read_text(encoding="utf-8")
     assert load_workbook(tmp_path / "e.xlsx").sheetnames[0] == "Сводка"
+
+
+def test_xlsx_writes_equals_sign_text_as_text_not_formula(tmp_path):
+    formula_like = '=HYPERLINK("http://evil","клик")'
+    call = make_call("anna_1.wav", "=anna", 90, "good")
+    dialogue = Dialogue(
+        utterances=(Utterance(0, 0.0, 2.0, formula_like, "manager"),),
+        approximate=False,
+        manager_channel="left",
+        role_source="intro",
+    )
+    call = CallResult(call.meta, dialogue, call.score, ("=1+1",))
+    data = build_summary([call], [], CHECKLIST, Thresholds(), "calls")
+    path = tmp_path / "report.xlsx"
+    write_xlsx(data, path)
+    wb = load_workbook(path)
+    cells = [cell for ws in wb for row in ws.iter_rows() for cell in row]
+    assert not [c.coordinate for c in cells if c.data_type == "f"]
+    texts = {c.value for c in cells}
+    assert {formula_like, "=anna", "=1+1"} <= texts

@@ -49,6 +49,15 @@ def _table(ws: Worksheet, header: list[str], rows: list[list], widths: list[int]
     ws.freeze_panes = "A2"
 
 
+def _text_not_formulas(wb: Workbook) -> None:
+    """Текст из звонков, начинающийся с «=», openpyxl принял бы за формулу — пишем как текст."""
+    for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for cell in row:
+                if cell.data_type == "f":
+                    cell.data_type = "s"
+
+
 def write_xlsx(summary: Summary, path: Path) -> None:
     names = titles(summary)
     thr = summary.thresholds
@@ -154,5 +163,6 @@ def write_xlsx(summary: Summary, path: Path) -> None:
     ]
     _table(ws, ["Файл", "Менеджер", "Время", "Говорит", "Реплика"], rows, [30, 20, 9, 12, 100])
 
+    _text_not_formulas(wb)
     path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(path)
