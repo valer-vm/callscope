@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from datetime import datetime
 from enum import StrEnum
@@ -81,6 +82,19 @@ def report_folder(base: Path, now: datetime) -> Path:
     return candidate
 
 
+def out_problem(out: Path) -> str | None:
+    """Почему в `out` не получится записать отчёт; None — можно писать.
+    Папки может ещё не быть — проверяется ближайшая существующая."""
+    existing = out
+    while not existing.exists() and existing.parent != existing:
+        existing = existing.parent
+    if not existing.is_dir():
+        return f"{existing} — не папка, отчёт в {out} не записать."
+    if not os.access(existing, os.W_OK | os.X_OK):
+        return f"Нет прав на запись в папку {existing}: отчёт в {out} не записать."
+    return None
+
+
 def _load_settings(
     config_path: Path | None, checklist_path: Path | None
 ) -> tuple[AppConfig, Checklist]:
@@ -135,6 +149,8 @@ def analyze(
     recordings = find_recordings(path)
     if not recordings:
         raise _fail(f"В папке {path} нет записей (mp3, wav, ogg, m4a).", 1)
+    if problem := out_problem(out):
+        raise _fail(problem + " Укажите другую папку в --out.", 2)
 
     model_size = model or config.model_size
     model_path = None if model else config.model_path
@@ -203,8 +219,12 @@ def analyze(
 
     summary = build_summary(results, skipped, checklist, thresholds, str(path))
     folder = report_folder(out, summary.generated_at)
-    write_html(summary, folder / "report.html")
-    write_xlsx(summary, folder / "report.xlsx")
+    try:
+        write_html(summary, folder / "report.html")
+        write_xlsx(summary, folder / "report.xlsx")
+    except OSError as exc:
+        reason = "нет прав на запись" if isinstance(exc, PermissionError) else exc.strerror
+        raise _fail(f"Не удалось записать отчёт в {folder}: {reason}.", 2) from None
 
     elapsed = time.monotonic() - started
     console.print(

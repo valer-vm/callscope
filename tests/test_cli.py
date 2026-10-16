@@ -254,3 +254,31 @@ def test_unmatched_filename_warns(tmp_path):
     result = run(str(calls), "--out", str(out))
     assert result.exit_code == 0
     assert "Не определён" in result.output
+
+
+def test_out_without_write_permission_exit_2_before_transcription(tmp_path):
+    calls = make_calls(tmp_path / "calls", GOOD_SET)
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0o500)
+    try:
+        result = run(str(calls), "--out", str(locked / "reports"))
+    finally:
+        locked.chmod(0o700)
+    assert result.exit_code == 2, result.output
+    assert "Нет прав на запись" in result.output
+    assert "Traceback" not in result.output
+    assert FakeTranscriber.calls == []
+
+
+def test_report_write_error_exit_2_without_traceback(tmp_path, monkeypatch):
+    calls = make_calls(tmp_path / "calls", GOOD_SET)
+
+    def denied(summary, path):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(cli, "write_html", denied)
+    result = run(str(calls), "--out", str(tmp_path / "out"))
+    assert result.exit_code == 2, result.output
+    assert "Не удалось записать отчёт" in result.output
+    assert "Traceback" not in result.output
