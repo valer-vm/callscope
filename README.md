@@ -25,7 +25,7 @@
 системный ffmpeg не нужен.
 
 ```bash
-git clone <адрес репозитория> callscope
+git clone https://github.com/valer-vm/callscope.git
 cd callscope
 uv sync
 ```
