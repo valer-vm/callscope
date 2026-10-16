@@ -17,4 +17,4 @@ models/
 
 # Локально, не для GitHub
 .autopilot/
-brief.md
+brief*.md
