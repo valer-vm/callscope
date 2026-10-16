@@ -17,7 +17,7 @@ import sqlite3
 import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -80,6 +80,10 @@ CREATE TABLE IF NOT EXISTS corrections (
     comment TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL,
     PRIMARY KEY (call_id, item_id)
+);
+CREATE TABLE IF NOT EXISTS revoked_sessions (
+    sid TEXT PRIMARY KEY,
+    revoked_at TEXT NOT NULL
 );
 """
 
@@ -525,6 +529,27 @@ class Storage:
                     "UPDATE calls SET warnings_json = ? WHERE id = ?",
                     (json.dumps(list(warnings), ensure_ascii=False), call_id),
                 )
+
+    # --- сессии ---------------------------------------------------------------------------
+
+    def revoke_session(self, sid: str, keep_days: int = 31) -> None:
+        """«Выйти»: сессия с этим идентификатором больше не действует, даже если её cookie
+        скопирована. Записи старше срока жизни сессии удаляются."""
+        now = datetime.now(UTC)
+        with self._connect() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO revoked_sessions (sid, revoked_at) VALUES (?, ?)",
+                (sid, _iso(now)),
+            )
+            db.execute(
+                "DELETE FROM revoked_sessions WHERE revoked_at < ?",
+                (_iso(now - timedelta(days=keep_days)),),
+            )
+
+    def is_session_revoked(self, sid: str) -> bool:
+        with self._connect() as db:
+            row = db.execute("SELECT 1 FROM revoked_sessions WHERE sid = ?", (sid,)).fetchone()
+        return row is not None
 
     def delete(self, call_id: int) -> None:
         """Удаляет звонок, его правки и файл записи. Без корзины."""

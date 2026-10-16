@@ -17,6 +17,8 @@ ENV_SECRET_KEY = "CALLSCOPE_SECRET_KEY"
 ENV_DATA_DIR = "CALLSCOPE_DATA_DIR"
 ENV_HOST = "CALLSCOPE_HOST"
 ENV_PORT = "CALLSCOPE_PORT"
+ENV_TRUSTED_PROXIES = "CALLSCOPE_TRUSTED_PROXIES"
+ENV_COOKIE_SECURE = "CALLSCOPE_COOKIE_SECURE"
 
 DEFAULT_DATA_DIR = Path("callscope-data")
 DEFAULT_DEMO_DATA_DIR = Path("callscope-data-demo")
@@ -34,6 +36,7 @@ class WebSettings:
     session_days: int = 30
     lockout_attempts: int = 5
     lockout_minutes: int = 5
+    cookie_secure: bool = False  # cookie только по HTTPS (панель за HTTPS-прокси)
 
     def __repr__(self) -> str:  # секреты не попадают в журналы и трассировки
         return f"WebSettings(data_dir={self.data_dir!s}, demo={self.demo})"
@@ -66,7 +69,24 @@ def load_web_settings(data_dir: Path | None, demo: bool) -> WebSettings:
         )
     folder = resolve_data_dir(data_dir, demo)
     secret = os.environ.get(ENV_SECRET_KEY, "").strip() or _stored_secret(folder)
-    return WebSettings(data_dir=folder, password=password, secret_key=secret, demo=demo)
+    return WebSettings(
+        data_dir=folder,
+        password=password,
+        secret_key=secret,
+        demo=demo,
+        cookie_secure=env_flag(ENV_COOKIE_SECURE),
+    )
+
+
+def env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "да")
+
+
+def trusted_proxies() -> str | None:
+    """Адреса обратного прокси, которому можно верить в X-Forwarded-For (через запятую).
+    Пусто — заголовки прокси не учитываются (иначе их подделка обходит блокировку входа)."""
+    value = os.environ.get(ENV_TRUSTED_PROXIES, "").strip()
+    return value or None
 
 
 def _stored_secret(folder: Path) -> str:

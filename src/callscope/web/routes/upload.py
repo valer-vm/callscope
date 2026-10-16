@@ -96,7 +96,11 @@ async def api_upload(
 ) -> JSONResponse:
     """Одна запись на запрос (поле формы `file`) → `{id, status, duplicate, message, url}`."""
     length = request.headers.get("content-length", "")
-    if length.isdigit() and int(length) > MAX_UPLOAD_BYTES + _MULTIPART_OVERHEAD:
+    if not length.isdigit():
+        # Без длины тело пришлось бы целиком записать на диск, прежде чем проверить размер.
+        # Браузер её всегда передаёт.
+        return _rejected("Не указан размер запроса (Content-Length) — загрузите файл заново.", 411)
+    if int(length) > MAX_UPLOAD_BYTES + _MULTIPART_OVERHEAD:
         return _rejected(_too_big("Запись"), 413)
     form = await request.form(max_files=1, max_fields=5)
     try:

@@ -251,9 +251,19 @@ def analyze(
 def _run_server(app_: FastAPI, host: str, port: int) -> None:
     import uvicorn
 
-    # proxy_headers=False: адрес клиента (для блокировки перебора паролей) не берётся
-    # из X-Forwarded-For — иначе его подделка с localhost обходит блокировку.
-    uvicorn.run(app_, host=host, port=port, log_level="info", proxy_headers=False)
+    from callscope.web.settings import trusted_proxies
+
+    # По умолчанию адрес клиента (для блокировки перебора паролей) не берётся из
+    # X-Forwarded-For — иначе его подделка с localhost обходит блокировку. За обратным
+    # прокси его адрес задаётся явно: CALLSCOPE_TRUSTED_PROXIES.
+    proxies = trusted_proxies()
+    if proxies:
+        uvicorn.run(
+            app_, host=host, port=port, log_level="info",
+            proxy_headers=True, forwarded_allow_ips=proxies,
+        )
+    else:
+        uvicorn.run(app_, host=host, port=port, log_level="info", proxy_headers=False)
 
 
 @app.command()

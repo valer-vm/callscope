@@ -142,15 +142,6 @@ def test_session_from_old_password_is_rejected(web_settings, tmp_path):
     assert second.get("/upload").status_code == 303
 
 
-@pytest.mark.parametrize("path", [])
-def test_stub_pages_render_in_shell(authed, path):
-    response = authed.get(path)
-    assert response.status_code == 200
-    assert "Раздел появится скоро" in response.text
-    for item in ("Обзор", "Менеджеры", "Звонки", "Загрузка", "Настройки", "Выйти"):
-        assert item in response.text
-
-
 @pytest.mark.parametrize("path", ["/", "/managers", "/calls"])
 def test_real_pages_render_in_shell(authed, path):
     response = authed.get(path)
@@ -185,7 +176,8 @@ def test_env_example_lists_all_names_without_values():
     lines = (root / ".env.example").read_text(encoding="utf-8").splitlines()
     settings = dict(line.split("=", 1) for line in lines if line and not line.startswith("#"))
     assert set(settings) == {"CALLSCOPE_PASSWORD", "CALLSCOPE_SECRET_KEY", "CALLSCOPE_DATA_DIR",
-                             "CALLSCOPE_HOST", "CALLSCOPE_PORT"}
+                             "CALLSCOPE_HOST", "CALLSCOPE_PORT", "CALLSCOPE_TRUSTED_PROXIES",
+                             "CALLSCOPE_COOKIE_SECURE"}
     assert all(value == "" for value in settings.values())
     assert ".env" in (root / ".gitignore").read_text(encoding="utf-8").splitlines()
 
@@ -199,3 +191,61 @@ def test_forwarded_for_does_not_bypass_lockout(client, login):
         headers={"X-Forwarded-For": "10.9.9.9", "X-Real-IP": "10.9.9.9"},
     )
     assert response.status_code == 429
+
+
+def test_logout_revokes_copied_cookie(web_settings):
+    first = TestClient(create_app(web_settings), follow_redirects=False)
+    assert first.post("/login", data={"password": web_settings.password}).status_code == 303
+    copied = dict(first.cookies)
+    first.post("/logout")
+    thief = TestClient(create_app(web_settings), follow_redirects=False, cookies=copied)
+    assert thief.get("/upload").status_code == 303
+    assert thief.get("/api/queue").status_code == 401
+
+
+def test_new_login_after_logout_works(authed, login):
+    authed.post("/logout")
+    assert login(authed).status_code == 303
+    assert authed.get("/upload").status_code == 200
+
+
+@pytest.mark.parametrize("header", ["origin", "referer"])
+def test_post_from_foreign_page_is_rejected(authed, header):
+    value = "http://evil.example" if header == "origin" else "http://evil.example/page"
+    response = authed.post("/logout", headers={header: value})
+    assert response.status_code == 403
+    assert authed.get("/upload").status_code == 200  # сессия цела — выхода не было
+
+
+def test_post_from_panel_page_or_without_origin_passes(authed):
+    assert authed.post("/period", data={"preset": "week", "next": "/"},
+                       headers={"origin": "http://testserver"}).status_code == 303
+    assert authed.post("/period", data={"preset": "week", "next": "/"}).status_code == 303
+
+
+def test_api_post_from_foreign_origin_is_json_403(authed):
+    response = authed.post("/api/calls/1/retry", headers={"origin": "http://evil.example"})
+    assert response.status_code == 403
+    assert response.headers["content-type"].startswith("application/json")
+
+
+def test_limiter_forgets_old_failures():
+    from callscope.web.auth import LoginLimiter
+
+    clock = [0.0]
+    limiter = LoginLimiter(attempts=5, minutes=5, clock=lambda: clock[0])
+    for number in range(100):
+        limiter.failure(f"10.0.0.{number}")
+    assert limiter.tracked() == 100
+    clock[0] += 5 * 60 + 1
+    limiter.failure("10.0.1.1")
+    assert limiter.tracked() == 1
+
+
+def test_secure_cookie_when_configured(web_settings):
+    from dataclasses import replace
+
+    client = TestClient(create_app(replace(web_settings, cookie_secure=True)),
+                        base_url="https://testserver", follow_redirects=False)
+    response = client.post("/login", data={"password": web_settings.password})
+    assert "secure" in response.headers["set-cookie"].lower()

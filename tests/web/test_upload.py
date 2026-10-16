@@ -145,3 +145,18 @@ def test_upload_page_has_dropzone_and_script(authed):
     assert page.status_code == 200
     assert 'id="dropzone"' in page.text and "/static/upload.js" in page.text
     assert 'class="active"' in page.text
+
+
+def test_upload_without_content_length_is_refused_before_reading(authed):
+    """Потоковое тело без длины не пишется на диск целиком — сразу 411."""
+    def body():
+        yield b"--x\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.mp3\"\r\n\r\n"
+        yield b"0" * 1024
+        yield b"\r\n--x--\r\n"
+
+    response = authed.post(
+        "/api/upload", content=body(),
+        headers={"content-type": "multipart/form-data; boundary=x"},
+    )
+    assert response.status_code == 411
+    assert response.json()["status"] == "rejected"

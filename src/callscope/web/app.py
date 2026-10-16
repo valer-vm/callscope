@@ -98,13 +98,14 @@ def create_app(settings: WebSettings, worker: Worker | None = None) -> FastAPI:
 
     # Порядок важен: последним добавлен — первым выполняется. Сессия нужна правилу входа.
     app.middleware("http")(auth.require_login)
+    app.middleware("http")(auth.check_same_origin)
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.secret_key,
         session_cookie=SESSION_COOKIE,
         max_age=settings.session_days * 24 * 3600,
         same_site="lax",
-        https_only=False,
+        https_only=settings.cookie_secure,
     )
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

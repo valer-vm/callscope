@@ -220,7 +220,3 @@ def render(
         request, name, full, status_code=status_code
     )
 
-
-def render_stub(request: Request, title: str, active: NavItem) -> HTMLResponse:
-    """Заглушка раздела, который ещё не построен: каркас и «Раздел появится скоро»."""
-    return render(request, "base.html", {"page_title": title}, active=active)

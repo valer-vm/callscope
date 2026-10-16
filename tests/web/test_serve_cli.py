@@ -17,7 +17,8 @@ from callscope.storage import Storage
 from callscope.web.settings import load_web_settings
 
 ENV_NAMES = ("CALLSCOPE_PASSWORD", "CALLSCOPE_SECRET_KEY", "CALLSCOPE_DATA_DIR",
-             "CALLSCOPE_HOST", "CALLSCOPE_PORT")
+             "CALLSCOPE_HOST", "CALLSCOPE_PORT", "CALLSCOPE_TRUSTED_PROXIES",
+             "CALLSCOPE_COOKIE_SECURE")
 
 
 @pytest.fixture(autouse=True)
@@ -184,3 +185,20 @@ def test_server_does_not_trust_forwarded_headers(monkeypatch):
     cli._run_server(object(), "127.0.0.1", 8000)
     # иначе uvicorn подставляет X-Forwarded-For от 127.0.0.1 как адрес клиента
     assert seen["proxy_headers"] is False
+
+
+def test_server_trusts_only_configured_proxy(monkeypatch):
+    import uvicorn
+
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: seen.update(kwargs))
+    monkeypatch.setenv("CALLSCOPE_TRUSTED_PROXIES", "172.18.0.1")
+    cli._run_server(object(), "0.0.0.0", 8000)
+    assert seen["proxy_headers"] is True
+    assert seen["forwarded_allow_ips"] == "172.18.0.1"
+
+
+def test_cookie_secure_flag_from_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("CALLSCOPE_PASSWORD", "x")
+    monkeypatch.setenv("CALLSCOPE_COOKIE_SECURE", "1")
+    assert load_web_settings(tmp_path / "d", demo=False).cookie_secure is True
