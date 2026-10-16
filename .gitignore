@@ -18,3 +18,7 @@ models/
 # Локально, не для GitHub
 .autopilot/
 brief*.md
+
+# Данные веб-панели (рабочие и демо)
+callscope-data/
+callscope-data-demo/

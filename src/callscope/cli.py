@@ -310,6 +310,46 @@ def serve(
     _run_server(web_app, bind_host, bind_port)
 
 
+@app.command()
+def demo(
+    data_dir: Annotated[
+        Path | None,
+        typer.Option("--data-dir", help="Папка демо-базы (по умолчанию ./callscope-data-demo)."),
+    ] = None,
+    force: Annotated[
+        bool, typer.Option("--force", help="Пересоздать уже существующую демо-базу.")
+    ] = False,
+) -> None:
+    """Создать демо-базу: 5 менеджеров и ~150 звонков за последние 8 недель."""
+    from callscope.demo import build_demo, clear_demo, demo_exists
+    from callscope.web.settings import resolve_data_dir
+
+    folder = resolve_data_dir(data_dir, demo=True)
+    if demo_exists(folder):
+        if not force:
+            raise _fail(
+                f"Демо-база уже есть в {folder}. Чтобы создать заново: callscope demo --force",
+                2,
+            )
+        if folder.resolve() == resolve_data_dir(None, demo=False).resolve():
+            raise _fail(
+                f"{folder} — рабочая папка данных, её нельзя пересоздавать как демо. "
+                "Укажите другую папку в --data-dir.",
+                2,
+            )
+        clear_demo(folder)
+    try:
+        summary = build_demo(folder)
+    except (OSError, CallScopeError) as exc:
+        message = exc.message_ru if isinstance(exc, CallScopeError) else str(exc)
+        raise _fail(f"Не удалось создать демо-базу в {folder}: {message}", 2) from None
+    typer.echo(
+        f"Демо-база готова: {folder} — звонков {summary.calls} "
+        f"(с аудио {summary.audio_calls}), менеджеров {len(summary.managers)}."
+    )
+    typer.echo("Открыть: callscope serve --demo")
+
+
 @app.command("import")
 def import_folder(
     path: Annotated[Path, typer.Argument(help="Папка с записями (mp3, wav, ogg, m4a).")],
