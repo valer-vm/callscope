@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import threading
+import wave
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -197,6 +198,27 @@ def export_xlsx(
 # --- страница звонка --------------------------------------------------------------------
 
 
+# Запись считается «без звука», если она заметно короче расшифровки (демо-заглушка
+# или обрезанный файл): плеер и перемотка тогда бессмысленны.
+_AUDIO_SHORTFALL = 2.0
+
+
+def audio_available(record: CallRecord) -> bool:
+    """Есть ли у звонка запись, по которой можно перематывать расшифровку.
+
+    Длина проверяется только у WAV (стандартный модуль `wave`); другие форматы
+    считаются полноценными.
+    """
+    if record.raw is None or record.audio_path.suffix.lower() != ".wav":
+        return True
+    try:
+        with wave.open(str(record.audio_path), "rb") as handle:
+            seconds = handle.getnframes() / float(handle.getframerate() or 1)
+    except (OSError, wave.Error, EOFError):
+        return True
+    return seconds + _AUDIO_SHORTFALL >= record.raw.duration
+
+
 def _record_or_404(storage: Storage, call_id: int) -> CallRecord:
     record = storage.get(call_id)
     if record is None:
@@ -229,6 +251,7 @@ def call_page(
             "done": "готово",
         }[record.status],
         "when": record.call_datetime or record.uploaded_at,
+        "has_audio": audio_available(record),
     }
     return render(request, "call.html", context, active="calls")
 

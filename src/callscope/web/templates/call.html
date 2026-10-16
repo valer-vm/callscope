@@ -13,6 +13,7 @@
 .warn{background:var(--mid-bg);color:var(--mid);border-radius:8px;padding:8px 12px;margin:10px 0;font-size:14px}
 .player{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0;margin:8px 0 4px}
 .player audio{width:100%;display:block}
+.player.no-audio{color:var(--muted,#6b7280);font-size:.92rem;padding:14px 18px}
 .tools{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0}
 .tools form{margin:0}
 .button.danger{color:var(--bad);border-color:#fecaca}
@@ -94,9 +95,13 @@ border-radius:8px;padding:6px 10px;border-left:4px solid transparent}
 
 {% for text in call.warnings %}<div class="warn">{{ text }}</div>{% endfor %}
 
+{% if has_audio %}
 <div class="player">
   <audio id="player" controls preload="metadata" src="/audio/{{ call.id }}"></audio>
 </div>
+{% else %}
+<div class="player no-audio">Записи разговора нет — только расшифровка (так устроены демо-звонки). Перемотка по клику недоступна.</div>
+{% endif %}
 <div class="tools">
   <form method="post" action="/calls/{{ call.id }}/swap" data-confirm="Поменять местами «Менеджера» и «Клиента» и заново оценить звонок? Ручные правки сохранятся.">
     <button type="submit" class="button small">Поменять стороны местами</button>

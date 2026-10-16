@@ -166,6 +166,48 @@ def test_call_page_mono_marks_approximate(authed, storage, raw_from_fixture, nor
     assert "стороны определены приблизительно" in authed.get(f"/calls/{record.id}").text
 
 
+def _wav(seconds: float) -> bytes:
+    import wave
+
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(1)
+        handle.setframerate(8000)
+        handle.writeframes(b"\x80" * int(8000 * seconds))
+    return buffer.getvalue()
+
+
+def _add_wav(storage, raw_from_fixture, normalizer, seconds: float) -> int:
+    raw = raw_from_fixture("good.json")
+    config = load_config(storage.config_path)
+    checklist = load_checklist(storage.checklist_path)
+    name = "ivanov_2026-10-01_1000.wav"
+    result = pipeline.analyze_raw(name, raw, config, checklist, normalizer)
+    record, _ = storage.add_upload(name, _wav(seconds))
+    storage.next_queued()
+    storage.save_result(record.id, raw, result)
+    return record.id
+
+
+def test_call_without_real_audio_shows_note_instead_of_player(
+    authed, storage, raw_from_fixture, normalizer
+):
+    # Демо-заглушка: секунда тишины при расшифровке на десятки секунд.
+    call_id = _add_wav(storage, raw_from_fixture, normalizer, seconds=1.0)
+    html = authed.get(f"/calls/{call_id}").text
+    assert "<audio" not in html
+    assert "Записи разговора нет" in html
+
+
+def test_call_with_full_wav_keeps_player(authed, storage, raw_from_fixture, normalizer):
+    duration = raw_from_fixture("good.json").duration
+    call_id = _add_wav(storage, raw_from_fixture, normalizer, seconds=duration)
+    html = authed.get(f"/calls/{call_id}").text
+    assert f'src="/audio/{call_id}"' in html
+    assert "Записи разговора нет" not in html
+
+
 def test_call_page_unknown_is_404(authed):
     assert authed.get("/calls/12345").status_code == 404
 
