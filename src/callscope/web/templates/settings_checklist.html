@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block head %}
+<style>
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px}
+.tabs a{padding:8px 16px;text-decoration:none;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a:hover{color:var(--ink)}
+.tabs a.active{color:var(--accent);border-bottom-color:var(--accent)}
+.lead{max-width:760px;font-size:14px;margin:4px 0 16px}
+.card{display:flex;gap:24px;align-items:flex-start;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px;margin:16px 0}
+.card h2{margin:0 0 4px;font-size:17px}
+.card .card-text{flex:1;min-width:0}
+.card p{margin:4px 0}
+.rescore-msg{font-weight:600}
+.card .bar{max-width:420px}
+.card .button[disabled]{opacity:.5;cursor:default}
+.card-plain{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 20px;margin:16px 0}
+.card-plain summary,.more summary{cursor:pointer;font-weight:600}
+.items{display:flex;flex-direction:column;gap:16px;margin-top:16px}
+.item{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+.item.has-error{border-color:#fca5a5}
+.item-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.item-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-weight:700;font-size:14px;flex-shrink:0}
+.item-name{flex:1;min-width:0;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item-tools{display:flex;gap:6px;flex-shrink:0}
+.button.danger{color:var(--bad)}
+.button.danger:hover{border-color:var(--bad)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 20px}
+.f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.f.wide{grid-column:1 / -1}
+.lab{font-weight:600;font-size:14px}
+.hint{color:var(--muted);font-size:12.5px;line-height:1.4}
+.f input[type=text],.f select,.f textarea{font:inherit;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:var(--ink);width:100%}
+.f textarea{resize:vertical;line-height:1.45}
+.f input.short{max-width:120px}
+.f input:focus,.f select:focus,.f textarea:focus,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+.f.invalid input,.f.invalid select,.f.invalid textarea{border-color:var(--bad);background:#fff7f7}
+.field-error{color:var(--bad);font-size:13px;font-weight:600;margin-top:2px}
+.more{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+.more .grid{margin-top:12px}
+.savebar{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;background:rgba(247,248,250,.94);backdrop-filter:blur(4px);border-top:1px solid var(--line);padding:12px 0;margin-top:16px}
+.savebar .spacer{flex:1}.savebar .button{white-space:nowrap}
+.empty-note{text-align:center;padding:24px}
+.tbl-note{max-width:760px}
+.checkbox{display:flex;gap:8px}
+.check-result{margin-top:10px;padding:10px 14px;border-radius:8px;background:#f3f4f6}
+.check-result.ok{background:var(--good-bg);color:var(--good)}
+.check-result.no{background:var(--bad-bg);color:var(--bad)}
+.form-narrow{max-width:760px}
+.row-inline{display:flex;gap:8px;align-items:flex-end}
+.row-inline .f{flex:1}
+.formats{font-size:13px;border-collapse:collapse;margin:8px 0}
+.formats th,.formats td{padding:4px 12px 4px 0;border:0;background:none;color:var(--ink);font-weight:400}
+.formats th{color:var(--muted);font-weight:600}
+@media (max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}.card{flex-direction:column}}
+</style>
+{% endblock %}
+
+{% macro field_error(errors, name) %}
+  {% if errors.get(name) %}<div class="field-error" role="alert">{{ errors[name] }}</div>{% endif %}
+{% endmacro %}
+
+{% macro item_card(view, errors, number) %}
+<section class="item{% if errors %} has-error{% endif %}" data-item>
+  <header class="item-head">
+    <span class="item-num" data-num>{{ number }}</span>
+    <strong class="item-name" data-name>{{ view.title or "Новый пункт" }}</strong>
+    <span class="item-tools">
+      <button type="button" class="button small" data-move="-1" title="Поднять выше" aria-label="Поднять выше">↑</button>
+      <button type="button" class="button small" data-move="1" title="Опустить ниже" aria-label="Опустить ниже">↓</button>
+      <button type="button" class="button small danger" data-remove>Удалить</button>
+    </span>
+  </header>
+  <input type="hidden" name="id" value="{{ view.id }}">
+  {{ field_error(errors, "_") }}
+  <div class="grid">
+    <label class="f wide{% if errors.get('title') %} invalid{% endif %}">
+      <span class="lab">Название</span>
+      <input type="text" name="title" value="{{ view.title }}" data-title>
+      <span class="hint">Как пункт называется в отчётах, например «Приветствие и представление».</span>
+      {{ field_error(errors, "title") }}
+    </label>
+    <label class="f{% if errors.get('weight') %} invalid{% endif %}">
+      <span class="lab">Вес</span>
+      <input type="text" name="weight" value="{{ view.weight }}" inputmode="decimal" class="short">
+      <span class="hint">Насколько пункт важен для балла. Чем число больше, тем сильнее он влияет: 5 — мелочь, 30 — главное.</span>
+      {{ field_error(errors, "weight") }}
+    </label>
+    <label class="f{% if errors.get('speaker') %} invalid{% endif %}">
+      <span class="lab">Чью речь проверяем</span>
+      <select name="speaker">
+        {% for value, label in speaker_options %}<option value="{{ value }}"{% if view.speaker == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <span class="hint">Обычно менеджера. «Клиент» — если пункт про слова клиента.</span>
+      {{ field_error(errors, "speaker") }}
+    </label>
+
+    <label class="f wide{% if errors.get('phrases') %} invalid{% endif %}">
+      <span class="lab">Ключевые фразы</span>
+      <textarea name="phrases" rows="5" spellcheck="false">{{ view.phrases }}</textarea>
+      <span class="hint">Пункт выполнен, если прозвучала любая из этих фраз. Одна фраза — одна строка. Формы слов («позвоню», «позвонил») находятся сами.</span>
+      {{ field_error(errors, "phrases") }}
+    </label>
+    <label class="f wide{% if errors.get('statement_phrases') %} invalid{% endif %}">
+      <span class="lab">Фразы-утверждения</span>
+      <textarea name="statement_phrases" rows="3" spellcheck="false">{{ view.statement_phrases }}</textarea>
+      <span class="hint">Как ключевые фразы, но не считаются, если сказаны вопросом или со словами «не»/«нет» («Вам нужен счёт?» не засчитывается). Одна фраза — одна строка; можно оставить пустым.</span>
+      {{ field_error(errors, "statement_phrases") }}
+    </label>
+    <label class="f wide{% if errors.get('synonyms') %} invalid{% endif %}">
+      <span class="lab">Синонимы</span>
+      <textarea name="synonyms" rows="3" spellcheck="false" placeholder="цена: стоимость, расценка">{{ view.synonyms }}</textarea>
+      <span class="hint">Слова, которые засчитываются вместо слова из фраз. Формат «слово: замена, замена», одно слово — одна строка.</span>
+      {{ field_error(errors, "synonyms") }}
+    </label>
+    <label class="f wide{% if errors.get('description') %} invalid{% endif %}">
+      <span class="lab">Описание</span>
+      <textarea name="description" rows="2">{{ view.description }}</textarea>
+      <span class="hint">Смысл пункта своими словами. Нужно для смысловой проверки моделью, если она включена.</span>
+      {{ field_error(errors, "description") }}
+    </label>
+  </div>
+
+  <details class="more"{% if errors.get('window') or errors.get('window_size') or errors.get('rule') or errors.get('min_matches') or errors.get('trigger') or errors.get('respond_within') %} open{% endif %}>
+    <summary>Дополнительно: где искать, правило, триггеры</summary>
+    <div class="grid">
+      <label class="f{% if errors.get('window') %} invalid{% endif %}">
+        <span class="lab">Окно поиска</span>
+        <select name="window">
+          {% for value, label in window_options %}<option value="{{ value }}"{% if view.window == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <span class="hint">«Окно» — часть звонка, где ищем фразы: весь звонок, только начало (приветствие) или только конец (прощание).</span>
+        {{ field_error(errors, "window") }}
+      </label>
+      <label class="f{% if errors.get('window_size') %} invalid{% endif %}">
+        <span class="lab">Сколько реплик в окне</span>
+        <input type="text" name="window_size" value="{{ view.window_size }}" inputmode="numeric" class="short">
+        <span class="hint">Сколько первых (или последних) реплик считать началом (или концом). Обычно 3.</span>
+        {{ field_error(errors, "window_size") }}
+      </label>
+      <label class="f{% if errors.get('rule') %} invalid{% endif %}">
+        <span class="lab">Правило проверки</span>
+        <select name="rule">
+          {% for value, label in rule_options %}<option value="{{ value }}"{% if view.rule == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <span class="hint">«Правило» — как проверять. «По ключевым фразам» ищет фразы. «Открытые вопросы» ищет вопросы, начинающиеся со слов из списка (что, как, сколько…).</span>
+        {{ field_error(errors, "rule") }}
+      </label>
+      <label class="f{% if errors.get('min_matches') %} invalid{% endif %}">
+        <span class="lab">Сколько совпадений нужно</span>
+        <input type="text" name="min_matches" value="{{ view.min_matches }}" inputmode="numeric" class="short">
+        <span class="hint">В скольких разных репликах должны встретиться фразы. Обычно 1.</span>
+        {{ field_error(errors, "min_matches") }}
+      </label>
+      <label class="f wide{% if errors.get('trigger') %} invalid{% endif %}">
+        <span class="lab">Триггеры</span>
+        <textarea name="trigger" rows="3" spellcheck="false" placeholder="дорого">{{ view.trigger }}</textarea>
+        <span class="hint">«Триггеры» — фразы клиента, после которых пункт нужно проверять (например, «дорого» для отработки возражения). Если клиент их не говорил, пункт «не применим» и в балл не входит. Пусто — проверяем всегда. Одна фраза — одна строка.</span>
+        {{ field_error(errors, "trigger") }}
+      </label>
+      <label class="f{% if errors.get('respond_within') %} invalid{% endif %}">
+        <span class="lab">Сколько реплик ждём ответ</span>
+        <input type="text" name="respond_within" value="{{ view.respond_within }}" inputmode="numeric" class="short">
+        <span class="hint">Только для триггеров: сколько ответов менеджера после триггера смотреть. Обычно 2.</span>
+        {{ field_error(errors, "respond_within") }}
+      </label>
+    </div>
+  </details>
+</section>
+{% endmacro %}
+
+{% block content %}
+<nav class="tabs" aria-label="Разделы настроек">
+  <a href="/settings/checklist"{% if tab == "checklist" %} class="active" aria-current="page"{% endif %}>Чек-лист</a>
+  <a href="/settings/filename"{% if tab == "filename" %} class="active" aria-current="page"{% endif %}>Имя файла</a>
+</nav>
+<h1>Чек-лист</h1>
+<p class="muted lead">Из этих пунктов складывается оценка звонка. Порядок важен: первый невыполненный пункт считается «этапом потери». Изменения сохраняются на этой странице, а к уже загруженным звонкам применяются кнопкой «Переоценить».</p>
+
+{% if saved %}<div class="alert good" role="status">Чек-лист сохранён. Чтобы новые правила применились к уже загруженным звонкам, нажмите «Переоценить все звонки».</div>{% endif %}
+{% if notice %}<div class="alert bad" role="alert">{{ notice }}</div>{% endif %}
+
+<section class="card" id="rescore" data-rescore data-state="{{ rescore.state }}">
+  <div class="card-text">
+    <h2>Переоценка звонков</h2>
+    <p class="muted">Пересчитывает баллы всех звонков по сохранённому чек-листу. Записи заново не расшифровываются, ручные правки остаются; правки удалённых пунктов исчезают.</p>
+    <p class="rescore-msg" data-rescore-msg aria-live="polite">{{ rescore.message }}</p>
+    <div class="bar" data-rescore-bar{% if rescore.state != "running" or not rescore.total %} hidden{% endif %}><i style="width: {{ ((rescore.done / rescore.total * 100) if rescore.total else 0)|round|int }}%"></i></div>
+  </div>
+  <form method="post" action="/settings/rescore">
+    <button type="submit" class="button primary" data-rescore-btn{% if rescore.state in ("running", "unavailable") %} disabled{% endif %}>Переоценить все звонки</button>
+  </form>
+</section>
+
+<form method="post" action="/settings/checklist" data-checklist-form novalidate>
+  {% if general_errors %}
+  <div class="alert bad" role="alert" data-form-error>
+    <b>Не сохранено — файл не изменён.</b>
+    {% for text in general_errors.values() %}<div>{{ text }}</div>{% endfor %}
+    {% if item_errors|select|list %}<div>Исправьте отмеченные ниже поля.</div>{% endif %}
+  </div>
+  {% elif item_errors|select|list %}
+  <div class="alert bad" role="alert" data-form-error><b>Не сохранено — файл не изменён.</b> Исправьте отмеченные ниже поля.</div>
+  {% endif %}
+
+  <details class="card-plain"{% if general_errors.get("synonyms") %} open{% endif %}>
+    <summary>Общие синонимы для всех пунктов</summary>
+    <label class="f{% if general_errors.get('synonyms') %} invalid{% endif %}">
+      <textarea name="global_synonyms" rows="4" spellcheck="false" placeholder="стоимость: цена">{{ global_synonyms }}</textarea>
+      <span class="hint">Формат «слово: замена, замена», одно слово — одна строка. Действуют во всех пунктах.</span>
+      {% if general_errors.get("synonyms") %}<div class="field-error" role="alert">{{ general_errors.synonyms }}</div>{% endif %}
+    </label>
+  </details>
+
+  <div class="items" data-items>
+    {% for view in views %}{{ item_card(view, item_errors[loop.index0], loop.index) }}{% endfor %}
+  </div>
+  <p class="empty-note muted" data-items-empty{% if views %} hidden{% endif %}>Пунктов нет. Добавьте первый.</p>
+
+  <div class="savebar">
+    <button type="button" class="button" data-add>+ Добавить пункт</button>
+    <span class="spacer"></span>
+    <span class="muted small" data-dirty hidden>Есть несохранённые изменения</span>
+    <button type="submit" class="button primary">Сохранить чек-лист</button>
+  </div>
+</form>
+
+<template id="item-template">{{ item_card(blank, {}, 0) }}</template>
+{% endblock %}
+{% block scripts %}<script src="/static/settings.js"></script>{% endblock %}

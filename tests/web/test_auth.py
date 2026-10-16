@@ -142,7 +142,7 @@ def test_session_from_old_password_is_rejected(web_settings, tmp_path):
     assert second.get("/upload").status_code == 303
 
 
-@pytest.mark.parametrize("path", ["/calls", "/settings/checklist"])
+@pytest.mark.parametrize("path", ["/calls"])
 def test_stub_pages_render_in_shell(authed, path):
     response = authed.get(path)
     assert response.status_code == 200

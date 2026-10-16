@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
+
+import yaml
 
 from callscope.config import DEFAULTS_DIR, read_yaml_file
 from callscope.errors import ConfigError
@@ -174,7 +177,10 @@ def _parse_item(path: Path, number: int, data: Any, seen: set[str]) -> Checklist
 
 
 def _parse(path: Path) -> Checklist:
-    data = read_yaml_file(path)
+    return _parse_data(path, read_yaml_file(path))
+
+
+def _parse_data(path: Path, data: Any) -> Checklist:
     if not isinstance(data, dict):
         raise ConfigError(f"Ошибка в {path.name}: ожидаются поля «items» и «synonyms».")
     for key in data:
@@ -199,3 +205,67 @@ def load_checklist(path: Path | None) -> Checklist:
         local = Path.cwd() / CHECKLIST_FILE_NAME
         path = local if local.is_file() else DEFAULTS_DIR / CHECKLIST_FILE_NAME
     return _parse(path)
+
+
+def parse_checklist_text(text: str, source: str = "чек-лист") -> Checklist:
+    """Проверяет текст чек-листа без файла; `source` попадает в сообщения об ошибках."""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        raise ConfigError(f"Ошибка в {source}: синтаксис YAML нарушен.") from None
+    return _parse_data(Path(source), data)
+
+
+def _number(value: float) -> int | float:
+    return int(value) if float(value).is_integer() else value
+
+
+def _item_to_dict(item: ChecklistItem) -> dict[str, Any]:
+    """Поля пункта в порядке чек-листа; значения по умолчанию не пишутся."""
+    data: dict[str, Any] = {"id": item.id, "title": item.title, "weight": _number(item.weight)}
+    if item.speaker != "manager":
+        data["speaker"] = item.speaker
+    if item.rule != "phrases":
+        data["rule"] = item.rule
+    if item.window != "all":
+        data["window"] = item.window
+    if item.window_size != 3:
+        data["window_size"] = item.window_size
+    if item.min_matches != 1:
+        data["min_matches"] = item.min_matches
+    if item.trigger:
+        data["trigger"] = list(item.trigger)
+    if item.respond_within != 2:
+        data["respond_within"] = item.respond_within
+    if item.phrases:
+        data["phrases"] = list(item.phrases)
+    if item.statement_phrases:
+        data["statement_phrases"] = list(item.statement_phrases)
+    if item.synonyms:
+        data["synonyms"] = {word: list(repl) for word, repl in item.synonyms.items()}
+    if item.description:
+        data["description"] = item.description
+    return data
+
+
+def dump_checklist(checklist: Checklist) -> str:
+    """YAML того же формата, что `checklist.yaml`; `load_checklist` читает его обратно."""
+    data: dict[str, Any] = {}
+    if checklist.synonyms:
+        data["synonyms"] = {word: list(repl) for word, repl in checklist.synonyms.items()}
+    data["items"] = [_item_to_dict(item) for item in checklist.items]
+    return yaml.safe_dump(data, allow_unicode=True, sort_keys=False, width=88)
+
+
+def save_checklist(checklist: Checklist, path: Path) -> None:
+    """Атомарная запись. Файл не меняется, если результат не проходит `load_checklist`."""
+    text = dump_checklist(checklist)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        load_checklist(tmp)
+        os.replace(tmp, path)
+    except OSError as exc:
+        raise ConfigError(f"Не удалось сохранить чек-лист: {exc.strerror}.") from None
+    finally:
+        tmp.unlink(missing_ok=True)

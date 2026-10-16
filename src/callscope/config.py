@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -241,3 +242,40 @@ def load_config(path: Path | None) -> AppConfig:
             return _build(default_path, base)
         path = local
     return _build(path, _merge(base, _read_mapping(path)))
+
+
+def config_to_dict(config: AppConfig) -> dict[str, Any]:
+    """Поля в порядке `callscope.yaml` (все, без пропусков)."""
+    return {
+        "filename_template": config.filename_template,
+        "date_format": config.date_format,
+        "time_format": config.time_format,
+        "model_size": config.model_size,
+        "model_path": config.model_path,
+        "manager_channel": config.manager_channel,
+        "manager_channel_overrides": dict(config.manager_channel_overrides),
+        "intro_phrases": list(config.intro_phrases),
+        "company_names": list(config.company_names),
+        "mono_turn_gap": config.mono_turn_gap,
+        "thresholds": {"good": config.thresholds.good, "medium": config.thresholds.medium},
+        "semantic": {
+            "enabled": config.semantic.enabled,
+            "url": config.semantic.url,
+            "model": config.semantic.model,
+            "timeout": config.semantic.timeout,
+        },
+    }
+
+
+def save_config(config: AppConfig, path: Path) -> None:
+    """Атомарная запись в формате `callscope.yaml`; результат проверяется `load_config`."""
+    text = yaml.safe_dump(config_to_dict(config), allow_unicode=True, sort_keys=False)
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        load_config(tmp)
+        os.replace(tmp, path)
+    except OSError as exc:
+        raise ConfigError(f"Не удалось сохранить настройки: {exc.strerror}.") from None
+    finally:
+        tmp.unlink(missing_ok=True)

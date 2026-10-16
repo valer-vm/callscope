@@ -1,0 +1,66 @@
+{% extends "settings_checklist.html" %}
+{% block content %}
+<nav class="tabs" aria-label="Разделы настроек">
+  <a href="/settings/checklist"{% if tab == "checklist" %} class="active" aria-current="page"{% endif %}>Чек-лист</a>
+  <a href="/settings/filename"{% if tab == "filename" %} class="active" aria-current="page"{% endif %}>Имя файла</a>
+</nav>
+<h1>Имя файла записи</h1>
+<p class="muted lead">Менеджер и дата звонка берутся из имени файла записи. Здесь вы описываете, как имя устроено, например <code>ivanov_2026-10-12_1530.mp3</code>.</p>
+
+{% if result %}
+<div class="alert good" role="status">Сохранено. Обновлено звонков: <b>{{ result.updated }}</b>, не подошло под шаблон: <b>{{ result.unmatched }}</b>.
+  {% if result.unmatched %}У тех, что не подошли, менеджер и дата остались прежними.{% endif %}</div>
+{% endif %}
+{% if errors %}
+<div class="alert bad" role="alert"><b>Не сохранено — настройки не изменены.</b>{% if errors.get("_") %} {{ errors["_"] }}{% endif %}</div>
+{% endif %}
+
+<form method="post" action="/settings/filename" class="form-narrow" data-filename-form novalidate>
+  <div class="grid">
+    <label class="f wide{% if errors.get('template') %} invalid{% endif %}">
+      <span class="lab">Шаблон имени</span>
+      <input type="text" name="template" value="{{ values.template }}" spellcheck="false" autocomplete="off">
+      <span class="hint">Куски в фигурных скобках заменяются данными: <code>{manager}</code> — имя менеджера (буквы, цифры, дефис), <code>{date}</code> — дата, <code>{time}</code> — время, <code>{any}</code> — любой текст, который нужно пропустить. Всё остальное (например, «_») должно совпасть буква в букву. Расширение (.mp3) не пишется.</span>
+      {% if errors.get("template") %}<div class="field-error" role="alert">{{ errors.template }}</div>{% endif %}
+    </label>
+    <label class="f{% if errors.get('date_format') %} invalid{% endif %}">
+      <span class="lab">Формат даты</span>
+      <input type="text" name="date_format" value="{{ values.date_format }}" spellcheck="false" autocomplete="off">
+      <span class="hint">Как дата записана в имени: <code>%Y-%m-%d</code> для 2026-10-12, <code>%d.%m.%Y</code> для 12.10.2026.</span>
+      {% if errors.get("date_format") %}<div class="field-error" role="alert">{{ errors.date_format }}</div>{% endif %}
+    </label>
+    <label class="f{% if errors.get('time_format') %} invalid{% endif %}">
+      <span class="lab">Формат времени</span>
+      <input type="text" name="time_format" value="{{ values.time_format }}" spellcheck="false" autocomplete="off">
+      <span class="hint">Как время записано в имени: <code>%H%M</code> для 1530, <code>%H-%M</code> для 15-30.</span>
+      {% if errors.get("time_format") %}<div class="field-error" role="alert">{{ errors.time_format }}</div>{% endif %}
+    </label>
+  </div>
+  <details class="card-plain">
+    <summary>Расшифровка обозначений даты и времени</summary>
+    <table class="formats">
+      <tr><th><code>%Y</code></th><td>год, 4 цифры (2026)</td><th><code>%H</code></th><td>часы, 00–23</td></tr>
+      <tr><th><code>%y</code></th><td>год, 2 цифры (26)</td><th><code>%M</code></th><td>минуты, 00–59</td></tr>
+      <tr><th><code>%m</code></th><td>месяц, 01–12</td><th><code>%S</code></th><td>секунды, 00–59</td></tr>
+      <tr><th><code>%d</code></th><td>день, 01–31</td><th></th><td></td></tr>
+    </table>
+  </details>
+
+  <h2>Проверка на примере</h2>
+  <div class="row-inline">
+    <label class="f">
+      <span class="lab">Имя файла</span>
+      <input type="text" name="example" value="{{ values.example }}" spellcheck="false" autocomplete="off">
+    </label>
+    <button type="submit" name="action" value="check" class="button" data-check-btn>Проверить</button>
+  </div>
+  <div class="check-result{% if check and check.matched is true %} ok{% elif check and check.matched is false %} no{% endif %}" data-check-result aria-live="polite">{{ check.message if check else "" }}</div>
+
+  <div class="savebar">
+    <span class="muted small">{% if calls_count %}Сейчас в панели звонков: {{ calls_count }}. {% endif %}При сохранении менеджер и дата пересчитываются у всех звонков по исходным именам файлов.</span>
+    <span class="spacer"></span>
+    <button type="submit" name="action" value="save" class="button primary">Сохранить и пересчитать</button>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="/static/settings.js"></script>{% endblock %}
