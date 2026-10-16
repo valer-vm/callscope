@@ -1,18 +1,41 @@
 <!-- autopilot:start -->
-# CallScope
-
-Локальная речевая аналитика звонков для руководителя отдела продаж: расшифровка, проверка по чек-листу скрипта, отчёты HTML и Excel.
+# CallScope — локальная речевая аналитика звонков отдела продаж: расшифровка, проверка по чек-листу, отчёты HTML и Excel.
 
 ## Команды
 
-| Команда | Что делает |
-|---------|------------|
-| `export UV_PROJECT_ENVIRONMENT=$HOME/.cache/callscope-venv` | Нужно здесь: в пути проекта есть «:», uv не может держать `.venv` внутри |
-| `uv sync` | Установить зависимости |
-| `uv run callscope analyze examples/calls` | Анализ папки звонков → `reports/<дата_время>/` |
-| `uv run python scripts/generate_examples.py` | Пересоздать тестовые звонки (`say`, macOS) |
-| `uv run ruff check src tests scripts && uv run pytest -q` | Линтер и тесты одной командой |
-| `CALLSCOPE_SLOW=1 uv run pytest tests/test_asr.py -q` | Медленный тест с реальной моделью |
+В рабочей папке (в пути есть «:») сначала: `export UV_PROJECT_ENVIRONMENT=$HOME/.cache/callscope-venv`; в пути без «:» не нужно.
+
+- `uv sync` — зависимости.
+- `uv run ruff check src tests scripts && uv run pytest -q` — линтер и тесты (162 passed, 1 skipped).
+- `uv run pytest tests/test_scoring.py -q` — один файл.
+- `uv run callscope analyze examples/calls` — отчёт в `reports/<дата_время>/`; ~31 с первый раз, 0 с из кэша.
+- `uv run python scripts/generate_examples.py --out <dir>` — 5 m4a за ~34 с (`say`, голос Milena, только macOS).
+- `CALLSCOPE_SLOW=1 uv run pytest tests/test_asr.py -q` — медленный тест с реальной моделью.
+
+## Где что лежит
+
+- Архитектура, поток данных, границы модулей, соглашения — `docs/architecture.md`.
+- Решения с причинами — `docs/adr/`; словарь — `CONTEXT.md`.
+- Что не доделано и известные баги — `.autopilot/PROGRESS.md`.
+- Оркестрация и CLI — `src/callscope/cli.py`; общие типы — `src/callscope/model.py`.
+- Правила оценки — `src/callscope/scoring.py`; чек-лист и конфиг — `checklist.yaml`, `callscope.yaml`.
+- Тесты оценки без аудио — `tests/fixtures/*.json`; тестовые звонки и их ожидания — `scripts/dialogues.yaml`.
+- Кэш расшифровок — `<папка звонков>/.callscope-cache/`.
+
+## Подводные камни
+
+- `checklist.yaml` и `callscope.yaml` в корне и копии в `src/callscope/defaults/` должны совпадать побайтно (проверяют тесты); правь оба.
+- faster-whisper 1.2.1 и PyAV 19 несовместимы в `decode_audio`; обход в `src/callscope/asr.py` (`_decode_stereo_av`).
+- pymorphy иногда выбирает редкий разбор (омонимы): сравнение идёт по основной лемме, видовые пары и «здравствуйте» — таблицы в `src/callscope/textnorm.py`.
+- Whisper пишет «Строй дом» и цифры («20», «10%»): фразы чек-листа и `company_names` должны это терпеть.
+- Ключ кэша не учитывает `mono_turn_gap` (и чек-лист): после смены порога для моно — `--no-cache`.
+- Новую зависимость добавляй только через согласование (в `interfaces.md` — BLOCKED); ffmpeg и системный python3 в системе не рассчитывай.
+- Не трогать: `brief.md`, `.autopilot/`, `CLAUDE.md`.
+
+## Окружение
+
+- `UV_PROJECT_ENVIRONMENT` — вынос venv из пути с «:».
+- `CALLSCOPE_SLOW` — `1` включает медленный тест с моделью.
 
 ## Как здесь работает Autopilot
 
