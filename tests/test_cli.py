@@ -160,6 +160,16 @@ def test_bad_config_exit_2(tmp_path):
     assert "manager_channel" in result.output
 
 
+def test_remote_ollama_url_exit_2_before_transcription(tmp_path):
+    calls = make_calls(tmp_path / "calls", GOOD_SET)
+    bad = tmp_path / "cfg.yaml"
+    bad.write_text('semantic: {url: "http://ollama.example.com:11434"}\n', encoding="utf-8")
+    result = run(str(calls), "--config", str(bad))
+    assert result.exit_code == 2
+    assert "semantic.url" in result.output
+    assert FakeTranscriber.calls == []
+
+
 def test_broken_file_is_skipped_and_listed(tmp_path):
     calls = make_calls(tmp_path / "calls", {**GOOD_SET, "broken_2026-10-14_1000.ogg": "BROKEN"})
     out = tmp_path / "out"

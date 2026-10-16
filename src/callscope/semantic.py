@@ -13,14 +13,12 @@ import urllib.error
 import urllib.request
 from dataclasses import replace
 from typing import Any
-from urllib.parse import urlsplit
 
 from callscope.checklist import Checklist, ChecklistItem
-from callscope.config import AppConfig, Thresholds
+from callscope.config import AppConfig, Thresholds, is_local_url
 from callscope.model import CallScore, Dialogue, Evidence, ItemResult, Utterance
 from callscope.scoring import grade_for
 
-_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _ROLE_NAMES = {"manager": "Менеджер", "client": "Клиент"}
 _NON_WORD = re.compile(r"[^0-9a-zа-я]+")
 _MIN_QUOTE_LETTERS = 3
@@ -46,15 +44,6 @@ class _OllamaUnavailable(Exception):
 def _normalize(text: str) -> str:
     """Нижний регистр, ё→е, слова через один пробел — для сверки цитаты."""
     return " ".join(_NON_WORD.sub(" ", text.lower().replace("ё", "е")).split())
-
-
-def _is_local(url: str) -> bool:
-    try:
-        parts = urlsplit(url)
-        host = parts.hostname
-    except ValueError:
-        return False
-    return parts.scheme in ("http", "https") and host in _LOCAL_HOSTS
 
 
 def _transcript(dialogue: Dialogue) -> str:
@@ -132,7 +121,7 @@ def recheck(
 ) -> tuple[CallScore, list[str]]:
     """Перепроверяет проваленные пункты. Включённость (`semantic.enabled`) решает вызывающий."""
     url = config.semantic.url
-    if not _is_local(url):
+    if not is_local_url(url):
         return score, [
             f"Смысловая проверка пропущена: адрес Ollama {url} не локальный "
             "(допустимы только localhost и 127.0.0.1) — записи не отправляются наружу."

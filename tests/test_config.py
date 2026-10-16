@@ -84,3 +84,23 @@ def test_root_copy_matches_packaged_default():
     assert (root / "callscope.yaml").read_text(encoding="utf-8") == packaged.read_text(
         encoding="utf-8"
     )
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://ollama.example.com:11434", "http://192.168.1.10:11434", "ftp://localhost:11434"],
+)
+def test_ollama_url_outside_this_computer_is_rejected_on_load(tmp_path, url):
+    path = tmp_path / "callscope.yaml"
+    path.write_text(f'semantic: {{url: "{url}"}}\n', encoding="utf-8")
+    with pytest.raises(ConfigError, match="semantic.url"):
+        load_config(path)
+
+
+@pytest.mark.parametrize(
+    "url", ["http://localhost:11434", "http://127.0.0.1:8080", "http://[::1]:11434"]
+)
+def test_local_ollama_url_is_accepted(tmp_path, url):
+    path = tmp_path / "callscope.yaml"
+    path.write_text(f'semantic: {{url: "{url}"}}\n', encoding="utf-8")
+    assert load_config(path).semantic.url == url

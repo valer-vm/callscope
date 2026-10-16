@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -59,6 +60,19 @@ def read_yaml_file(path: Path) -> Any:
         mark = getattr(exc, "problem_mark", None)
         where = f" (строка {mark.line + 1})" if mark is not None else ""
         raise ConfigError(f"Файл {path} — ошибка синтаксиса YAML{where}.") from None
+
+
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def is_local_url(url: str) -> bool:
+    """http(s) на этом компьютере — единственный допустимый адрес Ollama."""
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        return False
+    return parts.scheme in ("http", "https") and host in _LOCAL_HOSTS
 
 
 def _fail(path: Path, field_name: str, problem: str) -> ConfigError:
@@ -173,7 +187,7 @@ def _build(path: Path, data: dict[str, Any]) -> AppConfig:
     defaults = SemanticConfig()
     semantic = SemanticConfig(
         enabled=_bool(path, "semantic.enabled", semantic_raw.get("enabled", defaults.enabled)),
-        url=_str(path, "semantic.url", semantic_raw.get("url", defaults.url)),
+        url=_local_url(path, semantic_raw.get("url", defaults.url)),
         model=_str(path, "semantic.model", semantic_raw.get("model", defaults.model)),
         timeout=_number(
             path, "semantic.timeout", semantic_raw.get("timeout", defaults.timeout), positive=True
@@ -194,6 +208,18 @@ def _build(path: Path, data: dict[str, Any]) -> AppConfig:
         thresholds=thresholds,
         semantic=semantic,
     )
+
+
+def _local_url(path: Path, value: Any) -> str:
+    url = _str(path, "semantic.url", value)
+    if not is_local_url(url):
+        raise _fail(
+            path,
+            "semantic.url",
+            "Ollama должна работать на этом компьютере (например, http://localhost:11434): "
+            "расшифровки звонков не должны уходить наружу",
+        )
+    return url
 
 
 def _read_mapping(path: Path) -> dict[str, Any]:
