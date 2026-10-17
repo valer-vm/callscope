@@ -1,6 +1,6 @@
 [project]
 name = "callscope"
-version = "0.1.0"
+version = "1.0.0"
 description = "Локальная речевая аналитика звонков отдела продаж"
 requires-python = ">=3.11,<3.15"
 dependencies = [
